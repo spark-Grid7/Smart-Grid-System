@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid is string &&
+             data.email is string;
+    }
+    function isValidDevice(data) {
+      return data.keys().hasAll(['name', 'type', 'wattage', 'priority', 'userId']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.wattage is number && data.wattage >= 0 &&
+             data.priority is int && data.priority >= 1 && data.priority <= 3 &&
+             data.userId == request.auth.uid;
+    }
+    function isValidEnergyUsage(data) {
+      return data.keys().hasAll(['userId', 'timestamp', 'consumption']) &&
+             data.userId == request.auth.uid &&
+             data.consumption is number && data.consumption >= 0;
+    }
+
+    // User Rules
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    // Device Rules
+    match /devices/{deviceId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidDevice(request.resource.data);
+      allow update: if isAuthenticated() && isDocOwner() && isValidDevice(request.resource.data);
+      allow delete: if isAuthenticated() && isDocOwner();
+    }
+
+    // Energy Usage Rules
+    match /energyUsage/{usageId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidEnergyUsage(request.resource.data);
+    }
+
+    // Grid Status (Public Read, Admin Write - for demo, allow read to all auth)
+    match /grid/status {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only system can update (mocked for demo)
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "SmartGrid Energy Dashboard",
+  "description": "A comprehensive smart grid energy management system with real-time monitoring, device control, load shedding schedules, and energy analytics.",
+  "requestFramePermissions": []
+}

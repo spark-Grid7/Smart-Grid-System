@@ -1,0 +1,73 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "ecoMode": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Device": {
+      "title": "Device",
+      "description": "Smart appliance or device connected to the grid",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["AC", "Heater", "Pump", "Light", "Other"] },
+        "wattage": { "type": "number" },
+        "priority": { "type": "integer", "description": "1: High, 2: Medium, 3: Low" },
+        "status": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "wattage", "priority", "userId"]
+    },
+    "EnergyUsage": {
+      "title": "EnergyUsage",
+      "description": "Historical energy consumption record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "consumption": { "type": "number" }
+      },
+      "required": ["userId", "timestamp", "consumption"]
+    },
+    "GridConfig": {
+      "title": "GridConfig",
+      "description": "Global grid status and load shedding schedule",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["stable", "critical"] },
+        "livePower": { "type": "number" },
+        "loadSheddingSchedule": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/devices/{deviceId}": {
+      "schema": "Device",
+      "description": "Connected smart devices"
+    },
+    "/energyUsage/{usageId}": {
+      "schema": "EnergyUsage",
+      "description": "Historical energy data"
+    },
+    "/grid/status": {
+      "schema": "GridConfig",
+      "description": "Global grid information"
+    }
+  }
+}
