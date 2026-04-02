@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   ArrowUpRight,
   ArrowDownRight,
-  Smartphone
+  Smartphone,
+  Activity,
+
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { 
@@ -178,6 +180,29 @@ export const Dashboard = () => {
             {gridStatus === 'stable' ? 'Optimal Performance' : 'High Load Warning'}
           </p>
         </motion.div>
+        {/* --- NEW LIVE CURRENT CARD --- */}
+          <motion.div
+            whileHover={{ y: -5 }}
+            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600">
+                <Activity size={24} />
+              </div>
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600">
+                LIVE
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-500">Live Current</p>
+              <div className="flex items-baseline gap-1">
+                <h3 className="text-2xl font-bold text-slate-900">
+                  {readings.current.toFixed(2)}
+                </h3>
+                <span className="text-slate-400 font-medium">A</span>
+              </div>
+            </div>
+          </motion.div>
 
         {/* Live Power */}
         <motion.div 
