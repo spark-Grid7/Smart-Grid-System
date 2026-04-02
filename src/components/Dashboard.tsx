@@ -22,7 +22,8 @@ import {
   updateDoc,
   getDoc
 } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { ref, onValue } from 'firebase/database';
+import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -40,6 +41,27 @@ interface Device {
 }
 
 export const Dashboard = () => {
+  // 1. Create a place to store the sensor readings
+  const [readings, setReadings] = useState({ current: 0, voltage: 220, power: 0 });
+
+  // 2. Start "listening" to your Firebase Realtime Database
+  useEffect(() => {
+    // This connects to the 'grid' folder we saw in your Firebase photo
+    const gridRef = ref(rtdb, 'grid'); 
+    
+    const unsubscribe = onValue(gridRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setReadings({
+          current: data.current || 0,
+          voltage: data.voltage || 220,
+          power: (data.current || 0) * (data.voltage || 220)
+        });
+      }
+    });
+
+    return () => unsubscribe(); // This cleans up the connection
+  }, []);
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [ecoMode, setEcoMode] = useState(false);
