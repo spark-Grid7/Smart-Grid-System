@@ -21,13 +21,13 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "type": { "type": "string", "enum": ["AC", "Heater", "Pump", "Light", "Other"] },
-        "wattage": { "type": "number" },
+        "relayPin": { "type": "integer", "description": "GPIO pin number on ESP32" },
         "priority": { "type": "integer", "description": "1: High, 2: Medium, 3: Low" },
         "status": { "type": "boolean" },
         "userId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "type", "wattage", "priority", "userId"]
+      "required": ["name", "type", "relayPin", "priority", "userId"]
     },
     "EnergyUsage": {
       "title": "EnergyUsage",

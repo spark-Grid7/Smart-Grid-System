@@ -16,16 +16,18 @@ import {
   onSnapshot, 
   query, 
   where,
-  serverTimestamp 
+  serverTimestamp,
+  getDoc
 } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { ref, set, remove } from 'firebase/database';
+import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Device {
   id: string;
   name: string;
   type: string;
-  wattage: number;
+  relayPin: number;
   priority: number;
   status: boolean;
 }
@@ -36,7 +38,7 @@ export const Devices = () => {
   const [newDevice, setNewDevice] = useState({
     name: '',
     type: 'Other',
-    wattage: 0,
+    relayPin: 0,
     priority: 2
   });
 
@@ -67,8 +69,13 @@ export const Devices = () => {
         status: false,
         createdAt: serverTimestamp()
       });
+
+      // Sync initial status to Realtime Database
+      const rtdbDeviceRef = ref(rtdb, `devices/${newDevice.relayPin}`);
+      await set(rtdbDeviceRef, false);
+
       setShowAddModal(false);
-      setNewDevice({ name: '', type: 'Other', wattage: 0, priority: 2 });
+      setNewDevice({ name: '', type: 'Other', relayPin: 0, priority: 2 });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'devices');
     }
@@ -76,6 +83,15 @@ export const Devices = () => {
 
   const handleDeleteDevice = async (id: string) => {
     try {
+      // Get device info first to find relayPin
+      const deviceDoc = await getDoc(doc(db, 'devices', id));
+      if (deviceDoc.exists()) {
+        const relayPin = deviceDoc.data().relayPin;
+        // Remove from Realtime Database
+        const rtdbDeviceRef = ref(rtdb, `devices/${relayPin}`);
+        await remove(rtdbDeviceRef);
+      }
+
       await deleteDoc(doc(db, 'devices', id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `devices/${id}`);
@@ -122,7 +138,7 @@ export const Devices = () => {
               <tr>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Device</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Type</th>
-                <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Wattage</th>
+                <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Relay Pin</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Priority</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
@@ -150,7 +166,7 @@ export const Devices = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1 text-slate-600 font-bold">
                         <Zap size={14} className="text-amber-500" />
-                        {device.wattage} W
+                        GPIO {device.relayPin}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -237,13 +253,13 @@ export const Devices = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Wattage (W)</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Relay Pin (GPIO)</label>
                     <input 
                       required
                       type="number" 
-                      value={newDevice.wattage || ''}
-                      onChange={e => setNewDevice({...newDevice, wattage: parseInt(e.target.value)})}
-                      placeholder="e.g. 1500"
+                      value={newDevice.relayPin || ''}
+                      onChange={e => setNewDevice({...newDevice, relayPin: parseInt(e.target.value)})}
+                      placeholder="e.g. 13"
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
                   </div>

@@ -1,125 +1,276 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  PowerOff, 
-  Clock, 
+  Zap, 
+  ZapOff, 
   AlertTriangle, 
-  Info,
-  ChevronRight,
-  Zap
+  ShieldCheck,
+  ArrowDownRight,
+  Activity,
+  Settings2,
+  Leaf
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot,
+  doc,
+  updateDoc
+} from 'firebase/firestore';
+import { ref, onValue, set } from 'firebase/database';
+import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
+
+interface Device {
+  id: string;
+  name: string;
+  priority: number;
+  status: boolean;
+  relayPin: number;
+}
 
 export const LoadShedding = () => {
-  const schedule = [
-    { time: '06:00 - 08:00', area: 'Zone A', status: 'Completed' },
-    { time: '10:00 - 12:00', area: 'Zone B', status: 'Active' },
-    { time: '14:00 - 16:00', area: 'Zone C', status: 'Upcoming' },
-    { time: '18:00 - 20:00', area: 'Zone D', status: 'Upcoming' },
-  ];
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [ecoMode, setEcoMode] = useState(false);
+  const [livePower, setLivePower] = useState(0);
+  const [lastShedTime, setLastShedTime] = useState<string | null>(null);
+  const GRID_CAPACITY = 3000;
+  const loadPercentage = Math.min(100, Math.round((livePower / GRID_CAPACITY) * 100));
+
+  // Automatic Shedding Enforcement
+  useEffect(() => {
+    if (!ecoMode || devices.length === 0) return;
+
+    const enforceShedding = async () => {
+      let changed = false;
+      for (const device of devices) {
+        const status = getSheddingStatus(device.priority);
+        const shouldBeOff = status === 'shed';
+        
+        // If device is ON but should be SHED
+        if (shouldBeOff && device.status) {
+          const deviceRef = doc(db, 'devices', device.id);
+          const rtdbRef = ref(rtdb, `devices/${device.relayPin}`);
+          
+          await updateDoc(deviceRef, { status: false });
+          await set(rtdbRef, false);
+          changed = true;
+        }
+      }
+      if (changed) setLastShedTime(new Date().toLocaleTimeString());
+    };
+
+    enforceShedding();
+  }, [loadPercentage, ecoMode, devices]);
+
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const q = query(
+      collection(db, 'devices'),
+      where('userId', '==', auth.currentUser.uid)
+    );
+
+    const unsubscribeDevices = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Device));
+      setDevices(list);
+    });
+
+    const userDocRef = doc(db, 'users', auth.currentUser.uid);
+    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
+      if (doc.exists()) {
+        setEcoMode(doc.data().ecoMode || false);
+      }
+    });
+
+    const powerRef = ref(rtdb, 'grid/livePower');
+    const unsubscribePower = onValue(powerRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setLivePower(snapshot.val());
+      }
+    });
+
+    return () => {
+      unsubscribeDevices();
+      unsubscribeUser();
+      unsubscribePower();
+    };
+  }, []);
+
+  // Shedding Logic
+  const getSheddingStatus = (priority: number) => {
+    if (!ecoMode) return 'active';
+    if (loadPercentage > 85 && priority >= 2) return 'shed';
+    if (loadPercentage > 70 && priority >= 3) return 'shed';
+    return 'active';
+  };
+
+  const shedDevices = devices.filter(d => getSheddingStatus(d.priority) === 'shed');
+  const activeDevices = devices.filter(d => getSheddingStatus(d.priority) === 'active');
+  const estimatedSavings = shedDevices.length * 150; // Assuming 150W per device
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Load Shedding</h1>
-        <p className="text-slate-500 mt-1">Monitor grid load management and schedules</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Load Shedding Control</h1>
+          <p className="text-slate-500 mt-1">Priority-based automated grid management</p>
+        </div>
+        <div className={`px-6 py-3 rounded-2xl font-bold flex items-center gap-2 ${
+          ecoMode ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' : 'bg-slate-200 text-slate-500'
+        }`}>
+          {ecoMode ? <ShieldCheck size={20} /> : <ZapOff size={20} />}
+          Eco Mode: {ecoMode ? 'ACTIVE' : 'INACTIVE'}
+        </div>
       </div>
 
-      {/* Status Banner */}
-      <div className="bg-amber-50 border border-amber-100 p-6 rounded-3xl flex flex-col md:flex-row items-center gap-6">
-        <div className="p-4 bg-amber-500 text-white rounded-2xl shadow-lg shadow-amber-200">
-          <AlertTriangle size={32} />
-        </div>
-        <div className="flex-1 text-center md:text-left">
-          <h3 className="text-xl font-bold text-amber-900">Grid Load Warning</h3>
-          <p className="text-amber-700">Current grid load is at 92%. Load shedding may be initiated in Zone B shortly.</p>
-        </div>
-        <button className="px-6 py-3 bg-white text-amber-600 font-bold rounded-xl shadow-sm hover:bg-amber-100 transition-all">
-          View Details
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Schedule List */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-slate-800">Today's Schedule</h2>
-            <div className="flex items-center gap-2 text-slate-500 font-medium">
-              <Clock size={18} />
-              <span>March 30, 2026</span>
+      {/* Live Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+              <Activity size={24} />
+            </div>
+            <div>
+              <h3 className="text-slate-500 text-sm font-medium">Current Load</h3>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold text-slate-900">{loadPercentage}%</p>
+                <p className="text-sm font-bold text-slate-400">({livePower} W)</p>
+              </div>
+              <p className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${
+                loadPercentage > 85 ? 'text-rose-500' : loadPercentage > 70 ? 'text-amber-500' : 'text-emerald-500'
+              }`}>
+                {loadPercentage > 85 ? 'Critical Demand' : loadPercentage > 70 ? 'High Demand' : 'Normal Load'}
+              </p>
             </div>
           </div>
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${loadPercentage}%` }}
+              className={`h-full ${loadPercentage > 85 ? 'bg-rose-500' : loadPercentage > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+            />
+          </div>
+        </div>
 
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
+              <ZapOff size={24} />
+            </div>
+            <div>
+              <h3 className="text-slate-500 text-sm font-medium">Devices Shed</h3>
+              <p className="text-2xl font-bold text-slate-900">{shedDevices.length}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+              <Leaf size={24} />
+            </div>
+            <div>
+              <h3 className="text-slate-500 text-sm font-medium">Power Saved</h3>
+              <p className="text-2xl font-bold text-slate-900">{estimatedSavings} W</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Impact Analysis */}
+      <div className="bg-emerald-900 text-white p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-4">
+            <ShieldCheck className="text-emerald-400" size={28} />
+            <h2 className="text-2xl font-bold">Grid Protection Active</h2>
+          </div>
+          <p className="text-emerald-100/80 max-w-2xl mb-8">
+            The system is currently protecting your critical Level 3 devices by shedding non-essential loads. 
+            This prevents a total blackout and extends the life of your home's electrical infrastructure.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
+              <span className="text-xs font-bold text-emerald-300 uppercase">Last Action</span>
+              <p className="text-lg font-bold">{lastShedTime || 'No actions yet'}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
+              <span className="text-xs font-bold text-emerald-300 uppercase">Mode</span>
+              <p className="text-lg font-bold">Priority-First</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
+              <span className="text-xs font-bold text-emerald-300 uppercase">Status</span>
+              <p className="text-lg font-bold">{loadPercentage > 85 ? 'Critical' : 'Stable'}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
+              <span className="text-xs font-bold text-emerald-300 uppercase">Savings</span>
+              <p className="text-lg font-bold">₹{(estimatedSavings * 0.007 * 24).toFixed(2)}/day</p>
+            </div>
+          </div>
+        </div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-400/10 rounded-full -mr-32 -mt-32 blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-400/10 rounded-full -ml-32 -mb-32 blur-3xl" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Active Shedding Logic */}
+        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+            <Settings2 className="text-emerald-500" size={24} />
+            Shedding Rules (Eco Mode)
+          </h2>
+          <div className="space-y-6">
+            <div className={`p-4 rounded-2xl border ${loadPercentage > 70 && ecoMode ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-slate-700">Level 1: Low Priority</span>
+                {loadPercentage > 70 && ecoMode && <span className="text-xs font-bold text-amber-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
+              </div>
+              <p className="text-sm text-slate-500">Automatically turned OFF when load exceeds 70% in Eco Mode.</p>
+            </div>
+
+            <div className={`p-4 rounded-2xl border ${loadPercentage > 85 && ecoMode ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-slate-700">Level 2: Medium Priority</span>
+                {loadPercentage > 85 && ecoMode && <span className="text-xs font-bold text-rose-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
+              </div>
+              <p className="text-sm text-slate-500">Automatically turned OFF when load exceeds 85% in Eco Mode.</p>
+            </div>
+
+            <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-emerald-700">Level 3: Critical Priority</span>
+                <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Protected</span>
+              </div>
+              <p className="text-sm text-emerald-600/70">Never shed automatically. Reserved for essential medical or security equipment.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Device Status */}
+        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900 mb-6">Live Device Impact</h2>
           <div className="space-y-4">
-            {schedule.map((item, index) => (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                key={index}
-                className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 transition-all"
-              >
-                <div className="flex items-center gap-6">
-                  <div className={`p-3 rounded-2xl ${
-                    item.status === 'Active' ? 'bg-rose-50 text-rose-600 animate-pulse' :
-                    item.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' :
-                    'bg-slate-50 text-slate-400'
-                  }`}>
-                    <PowerOff size={24} />
+            {devices.map(device => {
+              const status = getSheddingStatus(device.priority);
+              return (
+                <div key={device.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-xl ${status === 'shed' ? 'bg-rose-100 text-rose-500' : 'bg-emerald-100 text-emerald-500'}`}>
+                      {status === 'shed' ? <ZapOff size={20} /> : <Zap size={20} />}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-800">{device.name}</h4>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Priority {device.priority}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-lg">{item.time}</h4>
-                    <p className="text-slate-500 font-medium">{item.area}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                    item.status === 'Active' ? 'bg-rose-100 text-rose-700' :
-                    item.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
-                    'bg-slate-100 text-slate-600'
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    status === 'shed' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
                   }`}>
-                    {item.status}
+                    {status === 'shed' ? 'SHED' : 'ACTIVE'}
                   </span>
-                  <ChevronRight size={20} className="text-slate-300 group-hover:text-emerald-500 transition-colors" />
                 </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-
-        {/* Info Sidebar */}
-        <div className="space-y-6">
-          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <Info size={20} />
-              </div>
-              <h3 className="font-bold text-slate-800">Process Info</h3>
-            </div>
-            <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center shrink-0 font-bold text-slate-500">1</div>
-                <p className="text-sm text-slate-600 leading-relaxed">Grid monitors load levels across all sectors in real-time.</p>
-              </div>
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center shrink-0 font-bold text-slate-500">2</div>
-                <p className="text-sm text-slate-600 leading-relaxed">When load exceeds 90%, non-essential sectors are notified.</p>
-              </div>
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center shrink-0 font-bold text-slate-500">3</div>
-                <p className="text-sm text-slate-600 leading-relaxed">Eco Mode users are automatically optimized to prevent shedding.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-emerald-500 p-8 rounded-3xl text-white shadow-lg shadow-emerald-100">
-            <Zap size={32} className="mb-4" fill="currentColor" />
-            <h3 className="text-xl font-bold mb-2">Help the Grid</h3>
-            <p className="text-emerald-50 text-sm leading-relaxed mb-6">
-              Enabling Eco Mode during peak hours helps prevent load shedding in your area.
-            </p>
-            <button className="w-full py-3 bg-white text-emerald-600 font-bold rounded-xl hover:bg-emerald-50 transition-all">
-              Enable Eco Mode
-            </button>
+              );
+            })}
           </div>
         </div>
       </div>

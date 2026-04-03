@@ -1,2 +1,0 @@
-C:\Users\Hariharan\AppData\Local\Python\pythoncore-3.14-64\python.exe" -m pip install fastapi uvicorn motor pydantic pymongo python-dotenv
-

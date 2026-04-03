@@ -10,7 +10,8 @@ import {
   CheckCircle2,
   ArrowUpRight,
   ArrowDownRight,
-  Smartphone
+  Smartphone,
+  Activity
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { 
@@ -22,7 +23,8 @@ import {
   updateDoc,
   getDoc
 } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { ref, onValue, set } from 'firebase/database';
+import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -34,7 +36,7 @@ interface Device {
   id: string;
   name: string;
   type: string;
-  wattage: number;
+  relayPin: number;
   status: boolean;
   priority: number;
 }
@@ -46,6 +48,10 @@ export const Dashboard = () => {
   const [gridStatus, setGridStatus] = useState<'stable' | 'critical'>('stable');
   const [livePower, setLivePower] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const GRID_CAPACITY = 3000; // Max Watts before warning
+  const loadPercentage = Math.min(100, Math.round((livePower / GRID_CAPACITY) * 100));
+  const isHighLoad = loadPercentage > 85;
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -68,19 +74,27 @@ export const Dashboard = () => {
       }
     });
 
-    // Mock grid status updates
-    const gridInterval = setInterval(() => {
-      setLivePower(prev => {
-        const base = 1200;
-        const variation = Math.random() * 200 - 100;
-        return Math.max(0, Math.round(base + variation));
-      });
-    }, 3000);
+    // Listen to Realtime Database for Live Power
+    const powerRef = ref(rtdb, 'grid/livePower');
+    const unsubscribePower = onValue(powerRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setLivePower(snapshot.val());
+      }
+    });
+
+    // Listen to Realtime Database for Grid Status
+    const statusRef = ref(rtdb, 'grid/status');
+    const unsubscribeStatus = onValue(statusRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setGridStatus(snapshot.val());
+      }
+    });
 
     return () => {
       unsubscribeDevices();
       unsubscribeUser();
-      clearInterval(gridInterval);
+      unsubscribePower();
+      unsubscribeStatus();
     };
   }, []);
 
@@ -94,16 +108,19 @@ export const Dashboard = () => {
     }
   };
 
-  const toggleDevice = async (deviceId: string, currentStatus: boolean) => {
+  const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number) => {
     try {
       const deviceRef = doc(db, 'devices', deviceId);
       await updateDoc(deviceRef, { status: !currentStatus });
+      
+      // Sync to Realtime Database for ESP32 to read instantly
+      const rtdbDeviceRef = ref(rtdb, `devices/${relayPin}`);
+      await set(rtdbDeviceRef, !currentStatus);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `devices/${deviceId}`);
     }
   };
 
-  const totalConsumption = devices.reduce((acc, dev) => acc + (dev.status ? dev.wattage : 0), 0);
   const savings = ecoMode ? 15.4 : 0;
 
   return (
@@ -172,7 +189,7 @@ export const Dashboard = () => {
             </div>
           </div>
           <h3 className="text-slate-500 text-sm font-medium">Live Power Usage</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{totalConsumption} W</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1">{livePower} W</p>
         </motion.div>
 
         {/* Savings */}
@@ -190,23 +207,58 @@ export const Dashboard = () => {
             </div>
           </div>
           <h3 className="text-slate-500 text-sm font-medium">Eco Savings</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">₹{(totalConsumption * 0.007 * 24).toFixed(2)}/day</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1">₹{(livePower * 0.007 * 24).toFixed(2)}/day</p>
         </motion.div>
 
-        {/* Next Task */}
+        {/* Grid Health */}
         <motion.div 
           whileHover={{ y: -5 }}
-          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"
+          onClick={() => navigate('/load-shedding')}
+          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm cursor-pointer hover:border-emerald-200 transition-all"
         >
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 rounded-2xl bg-purple-50 text-purple-600">
-              <Calendar size={24} />
+            <div className={cn(
+              "p-3 rounded-2xl",
+              isHighLoad ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"
+            )}>
+              <Activity size={24} />
+            </div>
+            <div className="text-right">
+              <span className="text-xs font-bold text-slate-400 uppercase">Load Level</span>
+              <p className={cn(
+                "text-sm font-bold",
+                isHighLoad ? "text-rose-600" : "text-emerald-600"
+              )}>{loadPercentage}%</p>
             </div>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium">Next Scheduled Task</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">Pump OFF at 22:00</p>
+          <h3 className="text-slate-500 text-sm font-medium">Load Shedding</h3>
+          <p className="text-2xl font-bold text-slate-900 mt-1">
+            {isHighLoad && ecoMode ? 'Active' : 'Standby'}
+          </p>
         </motion.div>
       </div>
+
+      {/* Grid Warning Banner */}
+      {isHighLoad && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-rose-50 border border-rose-100 p-6 rounded-3xl flex items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-rose-500 text-white rounded-2xl animate-pulse">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h4 className="font-bold text-rose-900">Critical Grid Load ({loadPercentage}%)</h4>
+              <p className="text-sm text-rose-700">Demand is exceeding safe limits. High-priority mode activated.</p>
+            </div>
+          </div>
+          <div className="px-6 py-2 bg-white text-rose-600 font-bold rounded-xl shadow-sm">
+            Action Required
+          </div>
+        </motion.div>
+      )}
 
       {/* Appliances Section */}
       <div>
@@ -235,7 +287,7 @@ export const Dashboard = () => {
                   <Power size={24} />
                 </div>
                 <button
-                  onClick={() => toggleDevice(device.id, device.status)}
+                  onClick={() => toggleDevice(device.id, device.status, device.relayPin)}
                   className={cn(
                     "w-14 h-8 rounded-full relative transition-colors duration-300",
                     device.status ? "bg-emerald-500" : "bg-slate-300"
@@ -253,7 +305,7 @@ export const Dashboard = () => {
                 <div className="flex items-center gap-2 text-slate-500 text-sm">
                   <span>{device.type}</span>
                   <span>•</span>
-                  <span>{device.wattage}W</span>
+                  <span>GPIO {device.relayPin}</span>
                 </div>
               </div>
 

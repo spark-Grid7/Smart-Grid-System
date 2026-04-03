@@ -22,7 +22,7 @@ interface Device {
   id: string;
   name: string;
   type: string;
-  wattage: number;
+  relayPin: number;
   priority: number;
   status: boolean;
 }
@@ -116,7 +116,7 @@ export const Priorities = () => {
                         <h4 className="font-bold text-slate-800">{device.name}</h4>
                         <div className="flex items-center gap-2 text-xs text-slate-400 font-bold uppercase mt-1">
                           <Zap size={12} />
-                          {device.wattage}W
+                          GPIO {device.relayPin}
                         </div>
                       </div>
                       <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

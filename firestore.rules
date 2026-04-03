@@ -17,9 +17,9 @@ service cloud.firestore {
              data.email is string;
     }
     function isValidDevice(data) {
-      return data.keys().hasAll(['name', 'type', 'wattage', 'priority', 'userId']) &&
+      return data.keys().hasAll(['name', 'type', 'relayPin', 'priority', 'userId']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.wattage is number && data.wattage >= 0 &&
+             data.relayPin is int && data.relayPin >= 0 &&
              data.priority is int && data.priority >= 1 && data.priority <= 3 &&
              data.userId == request.auth.uid;
     }
