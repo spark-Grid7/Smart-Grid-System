@@ -8,7 +8,8 @@ import {
   LogOut,
   Zap,
   Menu,
-  X
+  X,
+  Activity
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -16,6 +17,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { useLoadShedding } from '../hooks/useLoadShedding';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -53,7 +55,10 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
+  
+  // Activate global load shedding logic
+  const { loadPercentage, ecoMode, devices, isShedding } = useLoadShedding();
+  
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, path: '/analytics' },
@@ -80,13 +85,16 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <Zap size={24} fill="currentColor" />
           </div>
           {!isCollapsed && (
-            <motion.span 
+            <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="ml-3 text-xl font-bold text-slate-800 tracking-tight"
+              className="ml-3"
             >
-              SmartGrid
-            </motion.span>
+              <span className="text-xl font-bold text-slate-800 tracking-tight block leading-none">SmartGrid</span>
+              {isShedding && (
+                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest animate-pulse">Shedding Active</span>
+              )}
+            </motion.div>
           )}
         </div>
 
@@ -124,7 +132,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-4 z-50">
         <div className="flex items-center">
           <Zap size={24} className="text-emerald-500" fill="currentColor" />
-          <span className="ml-2 font-bold text-slate-800">SmartGrid</span>
+          <div className="ml-2">
+            <span className="font-bold text-slate-800 block leading-none">SmartGrid</span>
+            {isShedding && (
+              <span className="text-[8px] font-bold text-rose-500 uppercase tracking-widest animate-pulse">Shedding Active</span>
+            )}
+          </div>
         </div>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}

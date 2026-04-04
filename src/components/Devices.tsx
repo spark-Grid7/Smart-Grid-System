@@ -257,8 +257,11 @@ export const Devices = () => {
                     <input 
                       required
                       type="number" 
-                      value={newDevice.relayPin || ''}
-                      onChange={e => setNewDevice({...newDevice, relayPin: parseInt(e.target.value)})}
+                      value={newDevice.relayPin === 0 && newDevice.name === '' ? '' : newDevice.relayPin}
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        setNewDevice({...newDevice, relayPin: isNaN(val) ? 0 : val});
+                      }}
                       placeholder="e.g. 13"
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />

@@ -13,14 +13,17 @@ service cloud.firestore {
     }
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email']) &&
-             data.uid is string &&
-             data.email is string;
+             data.uid is string && data.uid.size() < 128 &&
+             data.email is string && data.email.size() < 256;
     }
     function isValidDevice(data) {
-      return data.keys().hasAll(['name', 'type', 'relayPin', 'priority', 'userId']) &&
+      return data.keys().hasAll(['name', 'type', 'relayPin', 'priority', 'userId', 'status', 'createdAt']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.relayPin is int && data.relayPin >= 0 &&
-             data.priority is int && data.priority >= 1 && data.priority <= 3 &&
+             data.type is string && data.type.size() < 50 &&
+             data.relayPin is number && data.relayPin >= 0 &&
+             data.priority is number && data.priority >= 1 && data.priority <= 3 &&
+             data.status is bool &&
+             data.createdAt is timestamp &&
              data.userId == request.auth.uid;
     }
     function isValidEnergyUsage(data) {

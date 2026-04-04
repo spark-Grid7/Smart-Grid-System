@@ -32,53 +32,42 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-interface Device {
-  id: string;
-  name: string;
-  type: string;
-  relayPin: number;
-  status: boolean;
-  priority: number;
-}
+import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [ecoMode, setEcoMode] = useState(false);
+  const { livePower, loadPercentage, ecoMode, devices } = useLoadShedding();
   const [gridStatus, setGridStatus] = useState<'stable' | 'critical'>('stable');
-  const [livePower, setLivePower] = useState(0);
+  const [voltage, setVoltage] = useState(0);
+  const [current, setCurrent] = useState(0);
+  const [motorStatus, setMotorStatus] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const GRID_CAPACITY = 3000; // Max Watts before warning
-  const loadPercentage = Math.min(100, Math.round((livePower / GRID_CAPACITY) * 100));
   const isHighLoad = loadPercentage > 85;
 
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    const devicesQuery = query(
-      collection(db, 'devices'),
-      where('userId', '==', auth.currentUser.uid)
-    );
-
-    const unsubscribeDevices = onSnapshot(devicesQuery, (snapshot) => {
-      const devList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Device));
-      setDevices(devList);
-      setLoading(false);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'devices'));
-
-    const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        setEcoMode(doc.data().ecoMode || false);
+    // Listen for Voltage and Current
+    const voltageRef = ref(rtdb, 'grid/voltage');
+    const unsubscribeVoltage = onValue(voltageRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setVoltage(snapshot.val());
       }
     });
 
-    // Listen to Realtime Database for Live Power
-    const powerRef = ref(rtdb, 'grid/livePower');
-    const unsubscribePower = onValue(powerRef, (snapshot) => {
+    const currentRef = ref(rtdb, 'grid/current');
+    const unsubscribeCurrent = onValue(currentRef, (snapshot) => {
       if (snapshot.exists()) {
-        setLivePower(snapshot.val());
+        setCurrent(snapshot.val());
+      }
+    });
+
+    const motorRef = ref(rtdb, 'grid/motor_status');
+    const unsubscribeMotor = onValue(motorRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setMotorStatus(snapshot.val());
       }
     });
 
@@ -90,10 +79,12 @@ export const Dashboard = () => {
       }
     });
 
+    setLoading(false);
+
     return () => {
-      unsubscribeDevices();
-      unsubscribeUser();
-      unsubscribePower();
+      unsubscribeVoltage();
+      unsubscribeCurrent();
+      unsubscribeMotor();
       unsubscribeStatus();
     };
   }, []);
@@ -108,14 +99,23 @@ export const Dashboard = () => {
     }
   };
 
-  const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number) => {
+  const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number, name: string) => {
+    // Ensure relayPin is a valid number (0 is valid)
+    const pin = (relayPin !== undefined && relayPin !== null) ? relayPin : 0;
+    
     try {
       const deviceRef = doc(db, 'devices', deviceId);
       await updateDoc(deviceRef, { status: !currentStatus });
       
       // Sync to Realtime Database for ESP32 to read instantly
-      const rtdbDeviceRef = ref(rtdb, `devices/${relayPin}`);
+      const rtdbDeviceRef = ref(rtdb, `devices/${pin}`);
       await set(rtdbDeviceRef, !currentStatus);
+
+      // If this is a motor/pump, update the global motor status too
+      if (name.toLowerCase().includes('motor') || name.toLowerCase().includes('pump')) {
+        const motorRef = ref(rtdb, 'grid/motor_status');
+        await set(motorRef, !currentStatus);
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `devices/${deviceId}`);
     }
@@ -183,9 +183,8 @@ export const Dashboard = () => {
             <div className="p-3 rounded-2xl bg-blue-50 text-blue-600">
               <TrendingUp size={24} />
             </div>
-            <div className="flex items-center text-emerald-600 text-sm font-bold">
-              <ArrowUpRight size={16} />
-              <span>2.4%</span>
+            <div className="text-right">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V: {voltage}V | I: {current}A</p>
             </div>
           </div>
           <h3 className="text-slate-500 text-sm font-medium">Live Power Usage</h3>
@@ -201,13 +200,16 @@ export const Dashboard = () => {
             <div className="p-3 rounded-2xl bg-amber-50 text-amber-600">
               <Leaf size={24} />
             </div>
-            <div className="flex items-center text-emerald-600 text-sm font-bold">
-              <ArrowDownRight size={16} />
-              <span>{savings}%</span>
+            <div className={cn(
+              "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+              motorStatus ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+            )}>
+              {motorStatus ? 'Motor: Active' : 'Motor: Idle'}
             </div>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium">Eco Savings</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">₹{(livePower * 0.007 * 24).toFixed(2)}/day</p>
+          <h3 className="text-slate-500 text-sm font-medium">Current Tariff Rate</h3>
+          <p className="text-2xl font-bold text-emerald-600 mt-1">₹{(livePower * 0.007 * 24).toFixed(2)}</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Daily estimated cost</p>
         </motion.div>
 
         {/* Grid Health */}
@@ -232,7 +234,10 @@ export const Dashboard = () => {
             </div>
           </div>
           <h3 className="text-slate-500 text-sm font-medium">Load Shedding</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">
+          <p className={cn(
+            "text-2xl font-bold mt-1",
+            isHighLoad && ecoMode ? "text-rose-600" : "text-slate-900"
+          )}>
             {isHighLoad && ecoMode ? 'Active' : 'Standby'}
           </p>
         </motion.div>
@@ -254,9 +259,12 @@ export const Dashboard = () => {
               <p className="text-sm text-rose-700">Demand is exceeding safe limits. High-priority mode activated.</p>
             </div>
           </div>
-          <div className="px-6 py-2 bg-white text-rose-600 font-bold rounded-xl shadow-sm">
-            Action Required
-          </div>
+          <button 
+            onClick={() => navigate('/load-shedding')}
+            className="px-6 py-2 bg-white text-rose-600 font-bold rounded-xl shadow-sm hover:bg-rose-50 transition-all"
+          >
+            Manage Grid
+          </button>
         </motion.div>
       )}
 
@@ -287,7 +295,7 @@ export const Dashboard = () => {
                   <Power size={24} />
                 </div>
                 <button
-                  onClick={() => toggleDevice(device.id, device.status, device.relayPin)}
+                  onClick={() => toggleDevice(device.id, device.status, device.relayPin, device.name)}
                   className={cn(
                     "w-14 h-8 rounded-full relative transition-colors duration-300",
                     device.status ? "bg-emerald-500" : "bg-slate-300"
@@ -305,7 +313,11 @@ export const Dashboard = () => {
                 <div className="flex items-center gap-2 text-slate-500 text-sm">
                   <span>{device.type}</span>
                   <span>•</span>
-                  <span>GPIO {device.relayPin}</span>
+                  <span className={cn(
+                    device.relayPin === undefined ? "text-rose-500 font-bold" : ""
+                  )}>
+                    {device.relayPin !== undefined ? `GPIO ${device.relayPin}` : 'No GPIO Set'}
+                  </span>
                 </div>
               </div>
 

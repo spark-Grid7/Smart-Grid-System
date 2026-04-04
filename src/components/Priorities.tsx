@@ -5,7 +5,8 @@ import {
   ArrowUp, 
   ArrowDown, 
   Zap,
-  Info
+  Info,
+  Activity
 } from 'lucide-react';
 import { 
   collection, 
@@ -17,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 
 interface Device {
   id: string;
@@ -28,6 +30,7 @@ interface Device {
 }
 
 export const Priorities = () => {
+  const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -148,6 +151,7 @@ export const Priorities = () => {
           </div>
         ))}
       </div>
+
     </div>
   );
 };

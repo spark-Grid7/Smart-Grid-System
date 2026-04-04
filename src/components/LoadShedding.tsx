@@ -21,81 +21,10 @@ import {
 import { ref, onValue, set } from 'firebase/database';
 import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 
-interface Device {
-  id: string;
-  name: string;
-  priority: number;
-  status: boolean;
-  relayPin: number;
-}
+import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const LoadShedding = () => {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [ecoMode, setEcoMode] = useState(false);
-  const [livePower, setLivePower] = useState(0);
-  const [lastShedTime, setLastShedTime] = useState<string | null>(null);
-  const GRID_CAPACITY = 3000;
-  const loadPercentage = Math.min(100, Math.round((livePower / GRID_CAPACITY) * 100));
-
-  // Automatic Shedding Enforcement
-  useEffect(() => {
-    if (!ecoMode || devices.length === 0) return;
-
-    const enforceShedding = async () => {
-      let changed = false;
-      for (const device of devices) {
-        const status = getSheddingStatus(device.priority);
-        const shouldBeOff = status === 'shed';
-        
-        // If device is ON but should be SHED
-        if (shouldBeOff && device.status) {
-          const deviceRef = doc(db, 'devices', device.id);
-          const rtdbRef = ref(rtdb, `devices/${device.relayPin}`);
-          
-          await updateDoc(deviceRef, { status: false });
-          await set(rtdbRef, false);
-          changed = true;
-        }
-      }
-      if (changed) setLastShedTime(new Date().toLocaleTimeString());
-    };
-
-    enforceShedding();
-  }, [loadPercentage, ecoMode, devices]);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    const q = query(
-      collection(db, 'devices'),
-      where('userId', '==', auth.currentUser.uid)
-    );
-
-    const unsubscribeDevices = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Device));
-      setDevices(list);
-    });
-
-    const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        setEcoMode(doc.data().ecoMode || false);
-      }
-    });
-
-    const powerRef = ref(rtdb, 'grid/livePower');
-    const unsubscribePower = onValue(powerRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setLivePower(snapshot.val());
-      }
-    });
-
-    return () => {
-      unsubscribeDevices();
-      unsubscribeUser();
-      unsubscribePower();
-    };
-  }, []);
+  const { livePower, loadPercentage, ecoMode, devices, lastShedTime } = useLoadShedding();
 
   // Shedding Logic
   const getSheddingStatus = (priority: number) => {
@@ -132,15 +61,15 @@ export const LoadShedding = () => {
               <Activity size={24} />
             </div>
             <div>
-              <h3 className="text-slate-500 text-sm font-medium">Current Load</h3>
+              <h3 className="text-slate-500 text-sm font-medium">Power Load</h3>
               <div className="flex items-baseline gap-2">
                 <p className="text-2xl font-bold text-slate-900">{loadPercentage}%</p>
                 <p className="text-sm font-bold text-slate-400">({livePower} W)</p>
               </div>
               <p className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${
-                loadPercentage > 85 ? 'text-rose-500' : loadPercentage > 70 ? 'text-amber-500' : 'text-emerald-500'
+                loadPercentage > 85 ? 'text-rose-500' : loadPercentage > 75 ? 'text-amber-500' : 'text-emerald-500'
               }`}>
-                {loadPercentage > 85 ? 'Critical Demand' : loadPercentage > 70 ? 'High Demand' : 'Normal Load'}
+                {loadPercentage > 85 ? 'Critical Demand' : loadPercentage > 75 ? 'High Demand' : 'Normal Load'}
               </p>
             </div>
           </div>
@@ -148,7 +77,7 @@ export const LoadShedding = () => {
             <motion.div 
               initial={{ width: 0 }}
               animate={{ width: `${loadPercentage}%` }}
-              className={`h-full ${loadPercentage > 85 ? 'bg-rose-500' : loadPercentage > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+              className={`h-full ${loadPercentage > 85 ? 'bg-rose-500' : loadPercentage > 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
             />
           </div>
         </div>
@@ -186,7 +115,8 @@ export const LoadShedding = () => {
             <h2 className="text-2xl font-bold">Grid Protection Active</h2>
           </div>
           <p className="text-emerald-100/80 max-w-2xl mb-8">
-            The system is currently protecting your critical Level 3 devices by shedding non-essential loads. 
+            The system is currently protecting your critical Level 1 devices by shedding non-essential loads. 
+            Low-priority devices are shed at 75% load, and medium-priority devices at 85% load. 
             This prevents a total blackout and extends the life of your home's electrical infrastructure.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -203,8 +133,8 @@ export const LoadShedding = () => {
               <p className="text-lg font-bold">{loadPercentage > 85 ? 'Critical' : 'Stable'}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-              <span className="text-xs font-bold text-emerald-300 uppercase">Savings</span>
-              <p className="text-lg font-bold">₹{(estimatedSavings * 0.007 * 24).toFixed(2)}/day</p>
+              <span className="text-xs font-bold text-emerald-300 uppercase">Tariff Rate</span>
+              <p className="text-lg font-bold">₹{(livePower * 0.007 * 24).toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -220,12 +150,12 @@ export const LoadShedding = () => {
             Shedding Rules (Eco Mode)
           </h2>
           <div className="space-y-6">
-            <div className={`p-4 rounded-2xl border ${loadPercentage > 70 && ecoMode ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+            <div className={`p-4 rounded-2xl border ${loadPercentage > 75 && ecoMode ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bold text-slate-700">Level 1: Low Priority</span>
-                {loadPercentage > 70 && ecoMode && <span className="text-xs font-bold text-amber-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
+                {loadPercentage > 75 && ecoMode && <span className="text-xs font-bold text-amber-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
               </div>
-              <p className="text-sm text-slate-500">Automatically turned OFF when load exceeds 70% in Eco Mode.</p>
+              <p className="text-sm text-slate-500">Automatically turned OFF when load exceeds 75% in Eco Mode.</p>
             </div>
 
             <div className={`p-4 rounded-2xl border ${loadPercentage > 85 && ecoMode ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-100'}`}>
