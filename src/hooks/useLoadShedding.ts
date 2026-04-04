@@ -22,6 +22,7 @@ interface Device {
 export const useLoadShedding = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [ecoMode, setEcoMode] = useState(false);
+  const [hardwareId, setHardwareId] = useState<string | null>(null);
   const [livePower, setLivePower] = useState(0);
   const [lastShedTime, setLastShedTime] = useState<string | null>(null);
   const GRID_CAPACITY = 3000;
@@ -51,20 +52,38 @@ export const useLoadShedding = () => {
     const userDocRef = doc(db, 'users', auth.currentUser.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
-        setEcoMode(doc.data().ecoMode || false);
+        const data = doc.data();
+        setEcoMode(data.ecoMode || false);
+        setHardwareId(data.hardwareId || null);
       }
     });
 
-    const powerRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/power`);
-    const unsubscribePower = onValue(powerRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setLivePower(snapshot.val());
+    // Listen to either hardwareId path or default user path
+    let unsubscribePower = () => {};
+    
+    const setupPowerListener = (hId: string | null) => {
+      const path = hId ? `hardware/${hId}/grid/power` : `users/${auth.currentUser.uid}/grid/power`;
+      const powerRef = ref(rtdb, path);
+      return onValue(powerRef, (snapshot) => {
+        if (snapshot.exists()) {
+          setLivePower(snapshot.val());
+        }
+      });
+    };
+
+    // We need to react to hardwareId changes
+    const userDocUnsub = onSnapshot(userDocRef, (doc) => {
+      if (doc.exists()) {
+        const hId = doc.data().hardwareId || null;
+        unsubscribePower();
+        unsubscribePower = setupPowerListener(hId);
       }
     });
 
     return () => {
       unsubscribeDevices();
       unsubscribeUser();
+      userDocUnsub();
       unsubscribePower();
     };
   }, []);
@@ -91,14 +110,16 @@ export const useLoadShedding = () => {
         if (shouldBeOff && device.status) {
           const pin = (device.relayPin !== undefined && device.relayPin !== null) ? device.relayPin : 0;
           const deviceRef = doc(db, 'devices', device.id);
-          const rtdbRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${pin}`);
+          
+          const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
+          const rtdbRef = ref(rtdb, `${basePath}/devices/${pin}`);
           
           updates.push(updateDoc(deviceRef, { status: false }));
           updates.push(set(rtdbRef, false));
 
           // If this is a motor/pump, update the global motor status too
           if (device.name.toLowerCase().includes('motor') || device.name.toLowerCase().includes('pump')) {
-            const motorRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/motor_status`);
+            const motorRef = ref(rtdb, `${basePath}/grid/motor_status`);
             updates.push(set(motorRef, false));
           }
 

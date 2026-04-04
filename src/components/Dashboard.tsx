@@ -11,7 +11,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Smartphone,
-  Activity
+  Activity,
+  Link as LinkIcon,
+  Cpu
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { 
@@ -33,6 +35,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 import { useLoadShedding } from '../hooks/useLoadShedding';
+import { DevicePower } from './DevicePower';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -42,12 +45,21 @@ export const Dashboard = () => {
   const [current, setCurrent] = useState(0);
   const [motorStatus, setMotorStatus] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [linkedId, setLinkedId] = useState<string | null>(null);
 
   const GRID_CAPACITY = 3000; // Max Watts before warning
   const isHighLoad = loadPercentage > 85;
 
   useEffect(() => {
     if (!auth.currentUser) return;
+
+    // Get current linked hardware ID
+    const userDocRef = doc(db, 'users', auth.currentUser.uid);
+    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
+      if (doc.exists()) {
+        setLinkedId(doc.data().hardwareId || null);
+      }
+    });
 
     // Self-healing: Ensure the branch exists on load
     const initializeIfMissing = async () => {
@@ -66,45 +78,37 @@ export const Dashboard = () => {
     };
     initializeIfMissing();
 
-    // Listen for Voltage and Current
-    const voltageRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/voltage`);
-    const unsubscribeVoltage = onValue(voltageRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setVoltage(snapshot.val());
-      }
-    });
+    // Listen for Voltage and Current (from hardware or user path)
+    const setupListeners = (hId: string | null) => {
+      const basePath = hId ? `hardware/${hId}/grid` : `users/${auth.currentUser.uid}/grid`;
+      
+      const vRef = ref(rtdb, `${basePath}/voltage`);
+      const cRef = ref(rtdb, `${basePath}/current`);
+      const mRef = ref(rtdb, `${basePath}/motor_status`);
+      const sRef = ref(rtdb, `${basePath}/status`);
 
-    const currentRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/current`);
-    const unsubscribeCurrent = onValue(currentRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setCurrent(snapshot.val());
-      }
-    });
+      const unsubV = onValue(vRef, s => s.exists() && setVoltage(s.val()));
+      const unsubC = onValue(cRef, s => s.exists() && setCurrent(s.val()));
+      const unsubM = onValue(mRef, s => s.exists() && setMotorStatus(s.val()));
+      const unsubS = onValue(sRef, s => s.exists() && setGridStatus(s.val()));
 
-    const motorRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/motor_status`);
-    const unsubscribeMotor = onValue(motorRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setMotorStatus(snapshot.val());
-      }
-    });
+      return () => {
+        unsubV();
+        unsubC();
+        unsubM();
+        unsubS();
+      };
+    };
 
-    // Listen to Realtime Database for Grid Status
-    const statusRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/status`);
-    const unsubscribeStatus = onValue(statusRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setGridStatus(snapshot.val());
-      }
-    });
+    let cleanupListeners = setupListeners(linkedId);
 
     setLoading(false);
 
     return () => {
-      unsubscribeVoltage();
-      unsubscribeCurrent();
-      unsubscribeMotor();
-      unsubscribeStatus();
+      unsubscribeUser();
+      cleanupListeners();
     };
-  }, []);
+  }, [linkedId]);
 
   const toggleEcoMode = async () => {
     if (!auth.currentUser) return;
@@ -125,12 +129,13 @@ export const Dashboard = () => {
       await updateDoc(deviceRef, { status: !currentStatus });
       
       // Sync to Realtime Database for ESP32 to read instantly
-      const rtdbDeviceRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${pin}`);
+      const basePath = linkedId ? `hardware/${linkedId}` : `users/${auth.currentUser.uid}`;
+      const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${pin}`);
       await set(rtdbDeviceRef, !currentStatus);
 
       // If this is a motor/pump, update the global motor status too
       if (name.toLowerCase().includes('motor') || name.toLowerCase().includes('pump')) {
-        const motorRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/motor_status`);
+        const motorRef = ref(rtdb, `${basePath}/grid/motor_status`);
         await set(motorRef, !currentStatus);
       }
     } catch (error) {
@@ -311,18 +316,21 @@ export const Dashboard = () => {
                 )}>
                   <Power size={24} />
                 </div>
-                <button
-                  onClick={() => toggleDevice(device.id, device.status, device.relayPin, device.name)}
-                  className={cn(
-                    "w-14 h-8 rounded-full relative transition-colors duration-300",
-                    device.status ? "bg-emerald-500" : "bg-slate-300"
-                  )}
-                >
-                  <motion.div
-                    animate={{ x: device.status ? 26 : 4 }}
-                    className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm"
-                  />
-                </button>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    onClick={() => toggleDevice(device.id, device.status, device.relayPin, device.name)}
+                    className={cn(
+                      "w-14 h-8 rounded-full relative transition-colors duration-300",
+                      device.status ? "bg-emerald-500" : "bg-slate-300"
+                    )}
+                  >
+                    <motion.div
+                      animate={{ x: device.status ? 26 : 4 }}
+                      className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm"
+                    />
+                  </button>
+                  {device.status && <DevicePower pin={device.relayPin} />}
+                </div>
               </div>
               
               <div className="space-y-1">

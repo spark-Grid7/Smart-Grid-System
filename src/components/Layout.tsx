@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   Activity,
-  ShieldCheck
+  ShieldCheck,
+  Cpu
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -67,6 +68,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     { id: 'devices', label: 'Devices', icon: Smartphone, path: '/devices' },
     { id: 'load-shedding', label: 'Load Shedding', icon: PowerOff, path: '/load-shedding' },
     { id: 'priorities', label: 'Priorities', icon: Settings2, path: '/priorities' },
+    { id: 'hardware', label: 'Hardware', icon: Cpu, path: '/hardware' },
   ];
 
   if (isAdmin) {

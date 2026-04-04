@@ -22,6 +22,7 @@ import {
 import { ref, set, remove, onValue } from 'firebase/database';
 import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
+import { DevicePower } from './DevicePower';
 
 interface Device {
   id: string;
@@ -31,30 +32,6 @@ interface Device {
   priority: number;
   status: boolean;
 }
-
-const DevicePower = ({ pin }: { pin: number }) => {
-  const [power, setPower] = useState<number>(0);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-    const powerRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${pin}/power`);
-    const unsubscribe = onValue(powerRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setPower(snapshot.val());
-      } else {
-        setPower(0);
-      }
-    });
-    return () => unsubscribe();
-  }, [pin]);
-
-  return (
-    <div className="flex items-center gap-1 text-emerald-600 font-bold">
-      <Zap size={14} className="text-emerald-500" />
-      {power} W
-    </div>
-  );
-};
 
 export const Devices = () => {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -87,6 +64,9 @@ export const Devices = () => {
     if (!auth.currentUser) return;
 
     try {
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const hardwareId = userDoc.exists() ? userDoc.data().hardwareId : null;
+
       await addDoc(collection(db, 'devices'), {
         ...newDevice,
         userId: auth.currentUser.uid,
@@ -95,7 +75,9 @@ export const Devices = () => {
       });
 
       // Sync initial status to Realtime Database
-      const rtdbDeviceRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${newDevice.relayPin}`);
+      // Use hardware path if linked, otherwise user path
+      const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
+      const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${newDevice.relayPin}`);
       await set(rtdbDeviceRef, false);
 
       setShowAddModal(false);
@@ -106,13 +88,18 @@ export const Devices = () => {
   };
 
   const handleDeleteDevice = async (id: string) => {
+    if (!auth.currentUser) return;
     try {
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const hardwareId = userDoc.exists() ? userDoc.data().hardwareId : null;
+      const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
+
       // Get device info first to find relayPin
       const deviceDoc = await getDoc(doc(db, 'devices', id));
       if (deviceDoc.exists()) {
         const relayPin = deviceDoc.data().relayPin;
         // Remove from Realtime Database
-        const rtdbDeviceRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${relayPin}`);
+        const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${relayPin}`);
         await remove(rtdbDeviceRef);
       }
 
