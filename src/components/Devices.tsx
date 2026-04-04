@@ -150,7 +150,6 @@ export const Devices = () => {
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Device</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Relay Pin</th>
-                <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Power</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Priority</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
@@ -179,9 +178,6 @@ export const Devices = () => {
                       <div className="flex items-center gap-1 text-slate-600 font-bold">
                         GPIO {device.relayPin}
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <DevicePower pin={device.relayPin} />
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${

@@ -329,7 +329,6 @@ export const Dashboard = () => {
                       className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm"
                     />
                   </button>
-                  {device.status && <DevicePower pin={device.relayPin} />}
                 </div>
               </div>
               
