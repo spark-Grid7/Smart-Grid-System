@@ -23,7 +23,7 @@ import {
   updateDoc,
   getDoc
 } from 'firebase/firestore';
-import { ref, onValue, set } from 'firebase/database';
+import { ref, onValue, set, get } from 'firebase/database';
 import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -49,22 +49,39 @@ export const Dashboard = () => {
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // Self-healing: Ensure the branch exists on load
+    const initializeIfMissing = async () => {
+      const gridRef = ref(rtdb, `users/${auth.currentUser.uid}/grid`);
+      const snapshot = await get(gridRef);
+      if (!snapshot.exists()) {
+        await set(gridRef, {
+          power: 0,
+          voltage: 0,
+          current: 0,
+          status: 'stable',
+          motor_status: false,
+          control: 'OFF'
+        });
+      }
+    };
+    initializeIfMissing();
+
     // Listen for Voltage and Current
-    const voltageRef = ref(rtdb, 'grid/voltage');
+    const voltageRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/voltage`);
     const unsubscribeVoltage = onValue(voltageRef, (snapshot) => {
       if (snapshot.exists()) {
         setVoltage(snapshot.val());
       }
     });
 
-    const currentRef = ref(rtdb, 'grid/current');
+    const currentRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/current`);
     const unsubscribeCurrent = onValue(currentRef, (snapshot) => {
       if (snapshot.exists()) {
         setCurrent(snapshot.val());
       }
     });
 
-    const motorRef = ref(rtdb, 'grid/motor_status');
+    const motorRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/motor_status`);
     const unsubscribeMotor = onValue(motorRef, (snapshot) => {
       if (snapshot.exists()) {
         setMotorStatus(snapshot.val());
@@ -72,7 +89,7 @@ export const Dashboard = () => {
     });
 
     // Listen to Realtime Database for Grid Status
-    const statusRef = ref(rtdb, 'grid/status');
+    const statusRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/status`);
     const unsubscribeStatus = onValue(statusRef, (snapshot) => {
       if (snapshot.exists()) {
         setGridStatus(snapshot.val());
@@ -108,12 +125,12 @@ export const Dashboard = () => {
       await updateDoc(deviceRef, { status: !currentStatus });
       
       // Sync to Realtime Database for ESP32 to read instantly
-      const rtdbDeviceRef = ref(rtdb, `devices/${pin}`);
+      const rtdbDeviceRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${pin}`);
       await set(rtdbDeviceRef, !currentStatus);
 
       // If this is a motor/pump, update the global motor status too
       if (name.toLowerCase().includes('motor') || name.toLowerCase().includes('pump')) {
-        const motorRef = ref(rtdb, 'grid/motor_status');
+        const motorRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/motor_status`);
         await set(motorRef, !currentStatus);
       }
     } catch (error) {

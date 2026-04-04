@@ -8,6 +8,9 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email == 'haribenaya32@gmail.com';
+    }
     function isDocOwner() {
       return isAuthenticated() && request.auth.uid == resource.data.userId;
     }
@@ -34,14 +37,14 @@ service cloud.firestore {
 
     // User Rules
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isOwner(userId) && isValidUser(request.resource.data);
     }
 
     // Device Rules
     match /devices/{deviceId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && isValidDevice(request.resource.data);
       allow update: if isAuthenticated() && isDocOwner() && isValidDevice(request.resource.data);
       allow delete: if isAuthenticated() && isDocOwner();
@@ -49,7 +52,7 @@ service cloud.firestore {
 
     // Energy Usage Rules
     match /energyUsage/{usageId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && isValidEnergyUsage(request.resource.data);
     }
 

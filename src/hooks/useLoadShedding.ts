@@ -55,7 +55,7 @@ export const useLoadShedding = () => {
       }
     });
 
-    const powerRef = ref(rtdb, 'grid/power');
+    const powerRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/power`);
     const unsubscribePower = onValue(powerRef, (snapshot) => {
       if (snapshot.exists()) {
         setLivePower(snapshot.val());
@@ -91,14 +91,14 @@ export const useLoadShedding = () => {
         if (shouldBeOff && device.status) {
           const pin = (device.relayPin !== undefined && device.relayPin !== null) ? device.relayPin : 0;
           const deviceRef = doc(db, 'devices', device.id);
-          const rtdbRef = ref(rtdb, `devices/${pin}`);
+          const rtdbRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${pin}`);
           
           updates.push(updateDoc(deviceRef, { status: false }));
           updates.push(set(rtdbRef, false));
 
           // If this is a motor/pump, update the global motor status too
           if (device.name.toLowerCase().includes('motor') || device.name.toLowerCase().includes('pump')) {
-            const motorRef = ref(rtdb, 'grid/motor_status');
+            const motorRef = ref(rtdb, `users/${auth.currentUser.uid}/grid/motor_status`);
             updates.push(set(motorRef, false));
           }
 

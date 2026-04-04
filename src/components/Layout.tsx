@@ -9,7 +9,8 @@ import {
   Zap,
   Menu,
   X,
-  Activity
+  Activity,
+  ShieldCheck
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -55,6 +56,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isAdmin = auth.currentUser?.email === 'haribenaya32@gmail.com';
   
   // Activate global load shedding logic
   const { loadPercentage, ecoMode, devices, isShedding } = useLoadShedding();
@@ -66,6 +68,10 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     { id: 'load-shedding', label: 'Load Shedding', icon: PowerOff, path: '/load-shedding' },
     { id: 'priorities', label: 'Priorities', icon: Settings2, path: '/priorities' },
   ];
+
+  if (isAdmin) {
+    menuItems.push({ id: 'admin', label: 'Admin Panel', icon: ShieldCheck, path: '/admin' });
+  }
 
   const handleLogout = async () => {
     await signOut(auth);

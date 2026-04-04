@@ -19,7 +19,7 @@ import {
   serverTimestamp,
   getDoc
 } from 'firebase/firestore';
-import { ref, set, remove } from 'firebase/database';
+import { ref, set, remove, onValue } from 'firebase/database';
 import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -31,6 +31,30 @@ interface Device {
   priority: number;
   status: boolean;
 }
+
+const DevicePower = ({ pin }: { pin: number }) => {
+  const [power, setPower] = useState<number>(0);
+
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const powerRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${pin}/power`);
+    const unsubscribe = onValue(powerRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setPower(snapshot.val());
+      } else {
+        setPower(0);
+      }
+    });
+    return () => unsubscribe();
+  }, [pin]);
+
+  return (
+    <div className="flex items-center gap-1 text-emerald-600 font-bold">
+      <Zap size={14} className="text-emerald-500" />
+      {power} W
+    </div>
+  );
+};
 
 export const Devices = () => {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -71,7 +95,7 @@ export const Devices = () => {
       });
 
       // Sync initial status to Realtime Database
-      const rtdbDeviceRef = ref(rtdb, `devices/${newDevice.relayPin}`);
+      const rtdbDeviceRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${newDevice.relayPin}`);
       await set(rtdbDeviceRef, false);
 
       setShowAddModal(false);
@@ -88,7 +112,7 @@ export const Devices = () => {
       if (deviceDoc.exists()) {
         const relayPin = deviceDoc.data().relayPin;
         // Remove from Realtime Database
-        const rtdbDeviceRef = ref(rtdb, `devices/${relayPin}`);
+        const rtdbDeviceRef = ref(rtdb, `users/${auth.currentUser.uid}/devices/${relayPin}`);
         await remove(rtdbDeviceRef);
       }
 
@@ -139,6 +163,7 @@ export const Devices = () => {
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Device</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Relay Pin</th>
+                <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Power</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Priority</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
@@ -165,9 +190,11 @@ export const Devices = () => {
                     <td className="px-6 py-4 text-slate-600 font-medium">{device.type}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1 text-slate-600 font-bold">
-                        <Zap size={14} className="text-amber-500" />
                         GPIO {device.relayPin}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <DevicePower pin={device.relayPin} />
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${

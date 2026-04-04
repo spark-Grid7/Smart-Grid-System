@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { ref, set } from 'firebase/database';
+import { auth, db, rtdb } from '../firebase';
 import { Zap, Mail, Lock, User, ArrowRight, AlertCircle, Chrome } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -13,6 +14,18 @@ export const Signup = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const initializeUserRTDB = async (uid: string) => {
+    const gridRef = ref(rtdb, `users/${uid}/grid`);
+    await set(gridRef, {
+      power: 0,
+      voltage: 0,
+      current: 0,
+      status: 'stable',
+      motor_status: false,
+      control: 'OFF'
+    });
+  };
 
   const handleGoogleSignup = async () => {
     setLoading(true);
@@ -31,6 +44,8 @@ export const Signup = () => {
           ecoMode: false,
           createdAt: serverTimestamp()
         });
+        // Automate RTDB branch creation
+        await initializeUserRTDB(user.uid);
       }
       navigate('/');
     } catch (err: any) {
@@ -57,6 +72,9 @@ export const Signup = () => {
         ecoMode: false,
         createdAt: serverTimestamp()
       });
+
+      // Automate RTDB branch creation
+      await initializeUserRTDB(user.uid);
       
       navigate('/login');
     } catch (err: any) {
