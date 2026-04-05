@@ -50,15 +50,6 @@ export const useLoadShedding = () => {
     });
 
     const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        setEcoMode(data.ecoMode || false);
-        setHardwareId(data.hardwareId || null);
-      }
-    });
-
-    // Listen to either hardwareId path or default user path
     let unsubscribePower = () => {};
     
     const setupPowerListener = (hId: string | null) => {
@@ -71,10 +62,14 @@ export const useLoadShedding = () => {
       });
     };
 
-    // We need to react to hardwareId changes
-    const userDocUnsub = onSnapshot(userDocRef, (doc) => {
+    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
-        const hId = doc.data().hardwareId || null;
+        const data = doc.data();
+        setEcoMode(data.ecoMode || false);
+        const hId = data.hardwareId || null;
+        setHardwareId(hId);
+        
+        // Update power listener when hardwareId changes
         unsubscribePower();
         unsubscribePower = setupPowerListener(hId);
       }
@@ -83,7 +78,6 @@ export const useLoadShedding = () => {
     return () => {
       unsubscribeDevices();
       unsubscribeUser();
-      userDocUnsub();
       unsubscribePower();
     };
   }, []);
@@ -145,5 +139,5 @@ export const useLoadShedding = () => {
     (rawLoadPercentage > 75 && devices.some(d => d.priority >= 3 && !d.status))
   );
 
-  return { livePower, loadPercentage, ecoMode, devices, lastShedTime, isShedding };
+  return { livePower, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId };
 };

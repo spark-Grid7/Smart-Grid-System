@@ -214,6 +214,89 @@ export const Hardware = () => {
           </li>
         </ul>
       </div>
+
+      <motion.div 
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 p-10"
+      >
+        <div className="flex items-center gap-3 mb-8">
+          <div className="p-2 bg-blue-500 text-white rounded-xl">
+            <Info size={24} />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900">Professional Installation Guide</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="space-y-4">
+            <div className="aspect-video bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 border border-dashed border-slate-300">
+              <Activity size={48} />
+            </div>
+            <h4 className="font-bold text-slate-800">1. Total Load Monitoring</h4>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Clamp a <b>CT Sensor (SCT-013)</b> around the main <b>Live Wire</b> coming from your meter. This measures the total current of the entire house without cutting any wires.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="aspect-video bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 border border-dashed border-slate-300">
+              <Zap size={48} />
+            </div>
+            <h4 className="font-bold text-slate-800">2. Voltage Sensing</h4>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Connect a <b>ZMPT101B Voltage Module</b> to a standard AC socket. This provides the real-time line voltage needed to calculate precise Wattage.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="aspect-video bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 border border-dashed border-slate-300">
+              <ShieldCheck size={48} />
+            </div>
+            <h4 className="font-bold text-slate-800">3. Circuit Interception</h4>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Every appliance has a dedicated wire starting at the <b>Breaker Box</b>. By placing your <b>Relay Board</b> here, you can intercept these wires at the source to turn off entire rooms or heavy appliances without touching the wall sockets.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-10 p-6 bg-amber-50 border border-amber-100 rounded-3xl">
+          <div className="flex gap-4">
+            <AlertCircle className="text-amber-500 shrink-0" size={24} />
+            <p className="text-sm text-amber-800">
+              <b>Safety Warning:</b> Working with high-voltage AC is dangerous. Always turn off the main breaker before installation and consult a certified electrician for wiring into the Distribution Board.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-12 border-t border-slate-100 pt-12">
+          <h3 className="text-xl font-bold text-slate-900 mb-6">Load Shedding Strategy</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-6 bg-rose-50 rounded-3xl border border-rose-100">
+              <div className="w-10 h-10 bg-rose-500 text-white rounded-xl flex items-center justify-center font-bold mb-4 shadow-lg shadow-rose-200">1</div>
+              <h4 className="font-bold text-rose-900 mb-2">High Priority</h4>
+              <p className="text-xs text-rose-700 leading-relaxed">
+                Connect your <b>Fridge, WiFi, and Main Lights</b> to these circuits. The system will never automatically shed these.
+              </p>
+            </div>
+
+            <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100">
+              <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center font-bold mb-4 shadow-lg shadow-amber-200">2</div>
+              <h4 className="font-bold text-amber-900 mb-2">Medium Priority</h4>
+              <p className="text-xs text-amber-700 leading-relaxed">
+                Connect <b>Air Conditioners and Heavy Appliances</b>. These will be shed if the total grid load exceeds <b>85%</b>.
+              </p>
+            </div>
+
+            <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100">
+              <div className="w-10 h-10 bg-blue-500 text-white rounded-xl flex items-center justify-center font-bold mb-4 shadow-lg shadow-blue-200">3</div>
+              <h4 className="font-bold text-blue-900 mb-2">Low Priority</h4>
+              <p className="text-xs text-blue-700 leading-relaxed">
+                Connect <b>Water Heaters, Pumps, and Decorative Lights</b>. These are the first to be shed when load exceeds <b>75%</b>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 };

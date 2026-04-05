@@ -8,6 +8,7 @@ import {
   Power,
   AlertCircle,
   CheckCircle2,
+  Unlink,
   ArrowUpRight,
   ArrowDownRight,
   Smartphone,
@@ -39,27 +40,18 @@ import { DevicePower } from './DevicePower';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
-  const { livePower, loadPercentage, ecoMode, devices } = useLoadShedding();
+  const { livePower, loadPercentage, ecoMode, devices, hardwareId } = useLoadShedding();
   const [gridStatus, setGridStatus] = useState<'stable' | 'critical'>('stable');
   const [voltage, setVoltage] = useState(0);
   const [current, setCurrent] = useState(0);
   const [motorStatus, setMotorStatus] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [linkedId, setLinkedId] = useState<string | null>(null);
 
   const GRID_CAPACITY = 3000; // Max Watts before warning
   const isHighLoad = loadPercentage > 85;
 
   useEffect(() => {
     if (!auth.currentUser) return;
-
-    // Get current linked hardware ID
-    const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        setLinkedId(doc.data().hardwareId || null);
-      }
-    });
 
     // Self-healing: Ensure the branch exists on load
     const initializeIfMissing = async () => {
@@ -100,15 +92,14 @@ export const Dashboard = () => {
       };
     };
 
-    let cleanupListeners = setupListeners(linkedId);
+    let cleanupListeners = setupListeners(hardwareId);
 
     setLoading(false);
 
     return () => {
-      unsubscribeUser();
       cleanupListeners();
     };
-  }, [linkedId]);
+  }, [hardwareId]);
 
   const toggleEcoMode = async () => {
     if (!auth.currentUser) return;
@@ -129,7 +120,7 @@ export const Dashboard = () => {
       await updateDoc(deviceRef, { status: !currentStatus });
       
       // Sync to Realtime Database for ESP32 to read instantly
-      const basePath = linkedId ? `hardware/${linkedId}` : `users/${auth.currentUser.uid}`;
+      const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
       const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${pin}`);
       await set(rtdbDeviceRef, !currentStatus);
 
@@ -346,14 +337,27 @@ export const Dashboard = () => {
               </div>
 
               <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={cn(
-                    "w-2 h-2 rounded-full",
-                    device.status ? "bg-emerald-500 animate-pulse" : "bg-slate-300"
-                  )} />
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    {device.status ? 'Running' : 'Standby'}
-                  </span>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "w-2 h-2 rounded-full",
+                      device.status ? "bg-emerald-500 animate-pulse" : "bg-slate-300"
+                    )} />
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      {device.status ? 'Running' : 'Standby'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {hardwareId ? (
+                      <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-0.5">
+                        <CheckCircle2 size={10} /> Linked
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">
+                        <Unlink size={10} /> Simulated
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="text-xs font-bold text-slate-400 uppercase">Priority:</span>

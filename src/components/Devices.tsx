@@ -6,7 +6,10 @@ import {
   Zap, 
   Search,
   Filter,
-  MoreVertical
+  MoreVertical,
+  CheckCircle2,
+  Unlink,
+  AlertCircle
 } from 'lucide-react';
 import { 
   collection, 
@@ -33,8 +36,10 @@ interface Device {
   status: boolean;
 }
 
+import { useLoadShedding } from '../hooks/useLoadShedding';
+
 export const Devices = () => {
-  const [devices, setDevices] = useState<Device[]>([]);
+  const { devices, hardwareId } = useLoadShedding();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDevice, setNewDevice] = useState({
     name: '',
@@ -43,30 +48,11 @@ export const Devices = () => {
     priority: 2
   });
 
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    const q = query(
-      collection(db, 'devices'),
-      where('userId', '==', auth.currentUser.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Device));
-      setDevices(list);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'devices'));
-
-    return () => unsubscribe();
-  }, []);
-
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser) return;
 
     try {
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      const hardwareId = userDoc.exists() ? userDoc.data().hardwareId : null;
-
       await addDoc(collection(db, 'devices'), {
         ...newDevice,
         userId: auth.currentUser.uid,
@@ -90,8 +76,6 @@ export const Devices = () => {
   const handleDeleteDevice = async (id: string) => {
     if (!auth.currentUser) return;
     try {
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      const hardwareId = userDoc.exists() ? userDoc.data().hardwareId : null;
       const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
 
       // Get device info first to find relayPin
@@ -135,6 +119,12 @@ export const Devices = () => {
             className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
           />
         </div>
+        {!hardwareId && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-sm font-bold">
+            <AlertCircle size={18} />
+            No hardware linked. Devices are in simulation mode.
+          </div>
+        )}
         <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-semibold hover:bg-slate-50 transition-all">
           <Filter size={20} />
           Filter
@@ -150,6 +140,7 @@ export const Devices = () => {
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Device</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Relay Pin</th>
+                <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Link Status</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Priority</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-sm font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
@@ -177,6 +168,21 @@ export const Devices = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1 text-slate-600 font-bold">
                         GPIO {device.relayPin}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        {hardwareId ? (
+                          <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-sm">
+                            <CheckCircle2 size={16} />
+                            Linked
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-slate-400 font-bold text-sm">
+                            <Unlink size={16} />
+                            Not Linked
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -267,6 +273,8 @@ export const Devices = () => {
                     <input 
                       required
                       type="number" 
+                      min="0"
+                      max="40"
                       value={newDevice.relayPin === 0 && newDevice.name === '' ? '' : newDevice.relayPin}
                       onChange={e => {
                         const val = parseInt(e.target.value);
@@ -275,8 +283,20 @@ export const Devices = () => {
                       placeholder="e.g. 13"
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
+                    <p className="text-[10px] text-slate-400 mt-1">Must match the physical pin on your ESP32.</p>
                   </div>
                 </div>
+                {hardwareId ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2 text-emerald-700 text-xs font-bold">
+                    <CheckCircle2 size={16} />
+                    Device will be linked to Hardware ID: {hardwareId}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-2 text-rose-700 text-xs font-bold">
+                    <AlertCircle size={16} />
+                    No hardware linked. This device will be in simulation mode.
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">Priority Level</label>
                   <div className="flex gap-2">
