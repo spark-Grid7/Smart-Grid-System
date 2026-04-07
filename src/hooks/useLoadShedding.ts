@@ -53,11 +53,16 @@ export const useLoadShedding = () => {
     let unsubscribePower = () => {};
     
     const setupPowerListener = (hId: string | null) => {
-      const path = hId ? `hardware/${hId}/grid/power` : `users/${auth.currentUser.uid}/grid/power`;
-      const powerRef = ref(rtdb, path);
-      return onValue(powerRef, (snapshot) => {
+      const basePath = hId ? `hardware/${hId}/grid` : `users/${auth.currentUser.uid}/grid`;
+      const gridRef = ref(rtdb, basePath);
+      
+      return onValue(gridRef, (snapshot) => {
         if (snapshot.exists()) {
-          setLivePower(snapshot.val());
+          const data = snapshot.val();
+          const v = data.voltage || 0;
+          const i = data.current || 0;
+          const p = data.power !== undefined ? data.power : (v * i);
+          setLivePower(Math.round(p));
         }
       });
     };

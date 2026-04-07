@@ -242,9 +242,9 @@ export const Hardware = () => {
             <div className="aspect-video bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 border border-dashed border-slate-300">
               <Zap size={48} />
             </div>
-            <h4 className="font-bold text-slate-800">2. Voltage Sensing</h4>
+            <h4 className="font-bold text-slate-800">2. Dynamic Voltage Sensing</h4>
             <p className="text-sm text-slate-500 leading-relaxed">
-              Connect a <b>ZMPT101B Voltage Module</b> to a standard AC socket. This provides the real-time line voltage needed to calculate precise Wattage.
+              Use a <b>ZMPT101B Voltage Module</b> powered by a <b>5V supply</b>. This sensor provides real-time line voltage data to the ESP32, allowing for accurate power calculations (V × I) even during voltage fluctuations.
             </p>
           </div>
 

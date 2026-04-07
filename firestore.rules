@@ -34,6 +34,16 @@ service cloud.firestore {
              data.userId == request.auth.uid &&
              data.consumption is number && data.consumption >= 0;
     }
+    function isValidSchedule(data) {
+      return data.keys().hasAll(['deviceId', 'deviceName', 'action', 'time', 'days', 'enabled', 'userId']) &&
+             data.deviceId is string &&
+             data.deviceName is string && data.deviceName.size() < 100 &&
+             data.action in ['ON', 'OFF'] &&
+             data.time is string && data.time.matches("^([01]?[0-9]|2[0-3]):[0-5][0-9]$") &&
+             data.days is list && data.days.size() <= 7 &&
+             data.enabled is bool &&
+             data.userId == request.auth.uid;
+    }
 
     // User Rules
     match /users/{userId} {
@@ -54,6 +64,14 @@ service cloud.firestore {
     match /energyUsage/{usageId} {
       allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && isValidEnergyUsage(request.resource.data);
+    }
+
+    // Schedule Rules
+    match /schedules/{scheduleId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidSchedule(request.resource.data);
+      allow update: if isAuthenticated() && isDocOwner() && isValidSchedule(request.resource.data);
+      allow delete: if isAuthenticated() && isDocOwner();
     }
 
     // Grid Status (Public Read, Admin Write - for demo, allow read to all auth)

@@ -148,10 +148,10 @@ export const Dashboard = () => {
           <button
             onClick={toggleEcoMode}
             className={cn(
-              "flex items-center gap-2 px-6 py-3 rounded-2xl font-semibold transition-all duration-300 shadow-sm",
+              "flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all duration-300 shadow-sm",
               ecoMode 
-                ? "bg-emerald-500 text-white shadow-emerald-200" 
-                : "bg-white text-slate-600 hover:bg-slate-50"
+                ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200" 
+                : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-100"
             )}
           >
             <Leaf size={20} className={ecoMode ? "animate-pulse" : ""} />
@@ -261,7 +261,7 @@ export const Dashboard = () => {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-rose-50 border border-rose-100 p-6 rounded-3xl flex items-center justify-between gap-4"
+          className="bg-rose-50 border border-rose-100 p-6 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4"
         >
           <div className="flex items-center gap-4">
             <div className="p-3 bg-rose-500 text-white rounded-2xl animate-pulse">
@@ -269,15 +269,17 @@ export const Dashboard = () => {
             </div>
             <div>
               <h4 className="font-bold text-rose-900">Critical Grid Load ({loadPercentage}%)</h4>
-              <p className="text-sm text-rose-700">Demand is exceeding safe limits. High-priority mode activated.</p>
+              <p className="text-sm text-rose-700">Demand is exceeding safe limits. {ecoMode ? 'Eco Mode is active and shedding load.' : 'Activate Eco Mode to protect the grid.'}</p>
             </div>
           </div>
-          <button 
-            onClick={() => navigate('/load-shedding')}
-            className="px-6 py-2 bg-white text-rose-600 font-bold rounded-xl shadow-sm hover:bg-rose-50 transition-all"
-          >
-            Manage Grid
-          </button>
+          <div className="flex items-center gap-6 w-full md:w-auto">
+            <button 
+              onClick={() => navigate('/load-shedding')}
+              className="text-rose-600 font-bold hover:underline transition-all"
+            >
+              Manage Grid
+            </button>
+          </div>
         </motion.div>
       )}
 
@@ -310,15 +312,23 @@ export const Dashboard = () => {
                 <div className="flex flex-col items-end gap-2">
                   <button
                     onClick={() => toggleDevice(device.id, device.status, device.relayPin, device.name)}
-                    className={cn(
-                      "w-14 h-8 rounded-full relative transition-colors duration-300",
-                      device.status ? "bg-emerald-500" : "bg-slate-300"
-                    )}
+                    className="group flex items-center gap-2 focus:outline-none"
                   >
-                    <motion.div
-                      animate={{ x: device.status ? 26 : 4 }}
-                      className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm"
-                    />
+                    <span className={cn(
+                      "text-xs font-bold uppercase tracking-wider transition-colors",
+                      device.status ? "text-emerald-500" : "text-slate-400"
+                    )}>
+                      {device.status ? 'Turn Off' : 'Turn On'}
+                    </span>
+                    <div className={cn(
+                      "w-10 h-5 rounded-full relative transition-colors duration-300",
+                      device.status ? "bg-emerald-500" : "bg-slate-200"
+                    )}>
+                      <motion.div
+                        animate={{ x: device.status ? 22 : 2 }}
+                        className="absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm"
+                      />
+                    </div>
                   </button>
                 </div>
               </div>

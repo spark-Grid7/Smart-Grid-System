@@ -11,6 +11,7 @@ import { Devices } from './components/Devices';
 import { LoadShedding } from './components/LoadShedding';
 import { Priorities } from './components/Priorities';
 import { Hardware } from './components/Hardware';
+import { Schedules } from './components/Schedules';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Zap } from 'lucide-react';
 
@@ -60,6 +61,7 @@ function App() {
         <Route path="/load-shedding" element={<PrivateRoute><LoadShedding /></PrivateRoute>} />
         <Route path="/priorities" element={<PrivateRoute><Priorities /></PrivateRoute>} />
         <Route path="/hardware" element={<PrivateRoute><Hardware /></PrivateRoute>} />
+        <Route path="/schedules" element={<PrivateRoute><Schedules /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute adminOnly><AdminDashboard /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

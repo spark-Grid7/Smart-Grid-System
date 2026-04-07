@@ -50,6 +50,22 @@
         "livePower": { "type": "number" },
         "loadSheddingSchedule": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Automated ON/OFF schedule for a device",
+      "type": "object",
+      "properties": {
+        "deviceId": { "type": "string" },
+        "deviceName": { "type": "string" },
+        "action": { "type": "string", "enum": ["ON", "OFF"] },
+        "time": { "type": "string", "description": "HH:mm format" },
+        "days": { "type": "array", "items": { "type": "string" } },
+        "enabled": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["deviceId", "deviceName", "action", "time", "days", "enabled", "userId"]
     }
   },
   "firestore": {
@@ -68,6 +84,10 @@
     "/grid/status": {
       "schema": "GridConfig",
       "description": "Global grid information"
+    },
+    "/schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Device automation schedules"
     }
   }
 }
