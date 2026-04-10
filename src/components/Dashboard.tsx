@@ -55,7 +55,8 @@ export const Dashboard = () => {
 
     // Self-healing: Ensure the branch exists on load
     const initializeIfMissing = async () => {
-      const gridRef = ref(rtdb, `users/${auth.currentUser.uid}/grid`);
+      const basePath = hardwareId ? `hardware/${hardwareId}/grid` : `users/${auth.currentUser.uid}/grid`;
+      const gridRef = ref(rtdb, basePath);
       const snapshot = await get(gridRef);
       if (!snapshot.exists()) {
         await set(gridRef, {
@@ -64,7 +65,7 @@ export const Dashboard = () => {
           current: 0,
           status: 'stable',
           motor_status: false,
-          control: 'OFF'
+          heartbeat: 0
         });
       }
     };
@@ -111,28 +112,31 @@ export const Dashboard = () => {
     }
   };
 
-  const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number, name: string) => {
-    // Ensure relayPin is a valid number (0 is valid)
-    const pin = (relayPin !== undefined && relayPin !== null) ? relayPin : 0;
-    
-    try {
-      const deviceRef = doc(db, 'devices', deviceId);
-      await updateDoc(deviceRef, { status: !currentStatus });
+    const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number, name: string) => {
+      if (hardwareId && !isOnline) return;
       
-      // Sync to Realtime Database for ESP32 to read instantly
-      const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
-      const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${pin}`);
-      await set(rtdbDeviceRef, !currentStatus);
+      const pin = (relayPin !== undefined && relayPin !== null) ? relayPin : 0;
+      
+      try {
+        const deviceRef = doc(db, 'devices', deviceId);
+        const newStatus = !currentStatus;
+        
+        // Update Firestore
+        await updateDoc(deviceRef, { status: newStatus });
+        
+        // Update Realtime Database
+        const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
+        const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${pin}`);
+        await set(rtdbDeviceRef, newStatus);
 
-      // If this is a motor/pump, update the global motor status too
-      if (name.toLowerCase().includes('motor') || name.toLowerCase().includes('pump')) {
-        const motorRef = ref(rtdb, `${basePath}/grid/motor_status`);
-        await set(motorRef, !currentStatus);
+        if (name.toLowerCase().includes('motor') || name.toLowerCase().includes('pump')) {
+          const motorRef = ref(rtdb, `${basePath}/grid/motor_status`);
+          await set(motorRef, newStatus);
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `devices/${deviceId}`);
       }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `devices/${deviceId}`);
-    }
-  };
+    };
 
   const savings = ecoMode ? 15.4 : 0;
 
@@ -161,7 +165,7 @@ export const Dashboard = () => {
       </div>
 
       {/* Top Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         {/* Grid Status */}
         <motion.div 
           whileHover={{ y: -5 }}
@@ -181,9 +185,9 @@ export const Dashboard = () => {
               {gridStatus}
             </span>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium">Grid Status</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">
-            {gridStatus === 'stable' ? 'Optimal Performance' : 'High Load Warning'}
+          <h3 className="text-slate-500 text-xs font-medium">Grid Status</h3>
+          <p className="text-lg font-bold text-slate-900 mt-1">
+            {gridStatus === 'stable' ? 'Optimal' : 'Critical'}
           </p>
         </motion.div>
 
@@ -200,8 +204,8 @@ export const Dashboard = () => {
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V: {voltage}V | I: {current}A</p>
             </div>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium">Live Power Usage</h3>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{livePower} W</p>
+          <h3 className="text-slate-500 text-xs font-medium">Live Power</h3>
+          <p className="text-lg font-bold text-slate-900 mt-1">{livePower} W</p>
         </motion.div>
 
         {/* Savings */}
@@ -217,15 +221,14 @@ export const Dashboard = () => {
               "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
               motorStatus ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
             )}>
-              {motorStatus ? 'Motor: Active' : 'Motor: Idle'}
+              {motorStatus ? 'Motor: ON' : 'Motor: OFF'}
             </div>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium">Current Tariff Rate</h3>
-          <p className="text-2xl font-bold text-emerald-600 mt-1">₹{(livePower * 0.007 * 24).toFixed(2)}</p>
-          <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Daily estimated cost</p>
+          <h3 className="text-slate-500 text-xs font-medium">Daily Cost</h3>
+          <p className="text-lg font-bold text-emerald-600 mt-1">₹{(livePower * 0.007 * 24).toFixed(2)}</p>
         </motion.div>
 
-        {/* Grid Health */}
+        {/* Load Shedding */}
         <motion.div 
           whileHover={{ y: -5 }}
           onClick={() => navigate('/load-shedding')}
@@ -239,19 +242,48 @@ export const Dashboard = () => {
               <Activity size={24} />
             </div>
             <div className="text-right">
-              <span className="text-xs font-bold text-slate-400 uppercase">Load Level</span>
+              <span className="text-xs font-bold text-slate-400 uppercase">Load</span>
               <p className={cn(
                 "text-sm font-bold",
                 isHighLoad ? "text-rose-600" : "text-emerald-600"
               )}>{loadPercentage}%</p>
             </div>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium">Load Shedding</h3>
+          <h3 className="text-slate-500 text-xs font-medium">Shedding</h3>
           <p className={cn(
-            "text-2xl font-bold mt-1",
+            "text-lg font-bold mt-1",
             isHighLoad && ecoMode ? "text-rose-600" : "text-slate-900"
           )}>
             {isHighLoad && ecoMode ? 'Active' : 'Standby'}
+          </p>
+        </motion.div>
+
+        {/* Hardware Status */}
+        <motion.div 
+          whileHover={{ y: -5 }}
+          onClick={() => navigate('/hardware')}
+          className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm cursor-pointer hover:border-emerald-200 transition-all"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className={cn(
+              "p-3 rounded-2xl",
+              hardwareId ? (isOnline ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600") : "bg-slate-50 text-slate-400"
+            )}>
+              <Cpu size={24} />
+            </div>
+            <div className="text-right">
+              <span className="text-xs font-bold text-slate-400 uppercase">Link</span>
+              <p className={cn(
+                "text-sm font-bold",
+                hardwareId ? (isOnline ? "text-emerald-600" : "text-rose-600") : "text-slate-400"
+              )}>
+                {hardwareId ? (isOnline ? 'Online' : 'Offline') : 'None'}
+              </p>
+            </div>
+          </div>
+          <h3 className="text-slate-500 text-xs font-medium">Hardware</h3>
+          <p className="text-lg font-bold text-slate-900 mt-1 truncate">
+            {hardwareId ? hardwareId : 'Simulated'}
           </p>
         </motion.div>
       </div>
@@ -362,8 +394,8 @@ export const Dashboard = () => {
               </div>
               
               <div className="space-y-1">
-                <h3 className="font-bold text-slate-800 text-lg">{device.name}</h3>
-                <div className="flex items-center gap-2 text-slate-500 text-sm">
+                <h3 className="font-bold text-slate-800 text-base">{device.name}</h3>
+                <div className="flex items-center gap-2 text-slate-500 text-xs">
                   <span>{device.type}</span>
                   <span>•</span>
                   <span className={cn(

@@ -26,6 +26,12 @@ import { ref, set, remove, onValue } from 'firebase/database';
 import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { DevicePower } from './DevicePower';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 interface Device {
   id: string;
@@ -39,7 +45,7 @@ interface Device {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Devices = () => {
-  const { devices, hardwareId } = useLoadShedding();
+  const { devices, hardwareId, isOnline } = useLoadShedding();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDevice, setNewDevice] = useState({
     name: '',
@@ -173,9 +179,12 @@ export const Devices = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         {hardwareId ? (
-                          <div className="flex items-center gap-1.5 text-emerald-600 font-bold text-sm">
-                            <CheckCircle2 size={16} />
-                            Linked
+                          <div className={cn(
+                            "flex items-center gap-1.5 font-bold text-sm",
+                            isOnline ? "text-emerald-600" : "text-rose-500"
+                          )}>
+                            {isOnline ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                            {isOnline ? 'Linked & Online' : 'Linked & Offline'}
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 text-slate-400 font-bold text-sm">

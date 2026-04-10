@@ -17,7 +17,9 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email']) &&
              data.uid is string && data.uid.size() < 128 &&
-             data.email is string && data.email.size() < 256;
+             data.email is string && data.email.size() < 256 &&
+             (!('ecoMode' in data) || data.ecoMode is bool) &&
+             (!('hardwareId' in data) || data.hardwareId is string || data.hardwareId == null);
     }
     function isValidDevice(data) {
       return data.keys().hasAll(['name', 'type', 'relayPin', 'priority', 'userId', 'status', 'createdAt']) &&

@@ -57,7 +57,19 @@ export const useLoadShedding = () => {
       const basePath = hId ? `hardware/${hId}/grid` : `users/${auth.currentUser.uid}/grid`;
       const gridRef = ref(rtdb, basePath);
       
-      return onValue(gridRef, (snapshot) => {
+      let lastHeartbeatVal = 0;
+
+      // Watchdog to check if data is stale
+      const watchdog = setInterval(() => {
+        if (lastHeartbeatVal > 0) {
+          const now = Date.now();
+          if (Math.abs(now - lastHeartbeatVal) > 30000) {
+            setIsOnline(false);
+          }
+        }
+      }, 5000);
+      
+      const unsub = onValue(gridRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           const v = data.voltage || 0;
@@ -65,17 +77,25 @@ export const useLoadShedding = () => {
           const p = data.power !== undefined ? data.power : (v * i);
           setLivePower(Math.round(p));
           
-          // Check if hardware is online (sent data in last 15 seconds)
+          // Check heartbeat (server timestamp)
           if (data.heartbeat) {
+            lastHeartbeatVal = data.heartbeat;
             const now = Date.now();
-            setIsOnline(now - data.heartbeat < 15000);
+            const isRecent = Math.abs(now - data.heartbeat) < 30000;
+            setIsOnline(isRecent);
           } else {
-            setIsOnline(true); // Fallback for older firmware
+            setIsOnline(true);
           }
         } else {
           setIsOnline(false);
+          setLivePower(0);
         }
       });
+
+      return () => {
+        unsub();
+        clearInterval(watchdog);
+      };
     };
 
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
@@ -118,7 +138,10 @@ export const useLoadShedding = () => {
         }
 
         if (shouldBeOff && device.status) {
-          const pin = (device.relayPin !== undefined && device.relayPin !== null) ? device.relayPin : 0;
+          // Skip shedding if the device has no relay pin set
+          if (device.relayPin === undefined || device.relayPin === null) continue;
+          
+          const pin = device.relayPin;
           const deviceRef = doc(db, 'devices', device.id);
           
           const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
