@@ -21,7 +21,10 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+import { useLoadShedding } from '../hooks/useLoadShedding';
+
 export const Hardware = () => {
+  const { isOnline } = useLoadShedding();
   const [hardwareId, setHardwareId] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [linkedId, setLinkedId] = useState<string | null>(null);
@@ -155,11 +158,17 @@ export const Hardware = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="flex items-center gap-6">
               <div className="bg-emerald-500 p-5 rounded-3xl text-white shadow-lg shadow-emerald-200">
-                <CheckCircle2 size={32} />
+                {isOnline ? <CheckCircle2 size={32} /> : <AlertCircle size={32} className="text-white" />}
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">Device Linked Successfully</h2>
-                <p className="text-slate-500">Your dashboard is currently receiving real-time data.</p>
+                <h2 className="text-2xl font-bold text-slate-900">
+                  {isOnline ? 'Device Online' : 'Device Offline'}
+                </h2>
+                <p className="text-slate-500">
+                  {isOnline 
+                    ? 'Your dashboard is currently receiving real-time data.' 
+                    : 'Hardware is linked but not communicating. Check WiFi.'}
+                </p>
                 <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-lg text-slate-600 font-mono font-bold text-sm">
                   ID: {linkedId}
                 </div>
@@ -181,10 +190,14 @@ export const Hardware = () => {
           <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
               <div className="flex items-center gap-3 text-slate-900 font-bold mb-2">
-                <Zap size={20} className="text-amber-500" />
-                Live Connection
+                <Zap size={20} className={isOnline ? "text-amber-500" : "text-slate-300"} />
+                {isOnline ? 'Live Connection' : 'No Connection'}
               </div>
-              <p className="text-sm text-slate-500">Your ESP32 is communicating with the cloud every 2 seconds.</p>
+              <p className="text-sm text-slate-500">
+                {isOnline 
+                  ? 'Your ESP32 is communicating with the cloud every 2 seconds.' 
+                  : 'Check if your ESP32 is powered on and connected to WiFi.'}
+              </p>
             </div>
             <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
               <div className="flex items-center gap-3 text-slate-900 font-bold mb-2">

@@ -40,7 +40,7 @@ import { DevicePower } from './DevicePower';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
-  const { livePower, loadPercentage, ecoMode, devices, hardwareId } = useLoadShedding();
+  const { livePower, loadPercentage, ecoMode, devices, hardwareId, isOnline } = useLoadShedding();
   const [gridStatus, setGridStatus] = useState<'stable' | 'critical'>('stable');
   const [voltage, setVoltage] = useState(0);
   const [current, setCurrent] = useState(0);
@@ -257,6 +257,30 @@ export const Dashboard = () => {
       </div>
 
       {/* Grid Warning Banner */}
+      {hardwareId && !isOnline && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-50 border border-amber-100 p-6 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-amber-500 text-white rounded-2xl">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h4 className="font-bold text-amber-900">Hardware Offline</h4>
+              <p className="text-sm text-amber-700">Your ESP32 is not communicating. Dashboard values are frozen and remote control is disabled.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => navigate('/hardware')}
+            className="px-6 py-2 bg-white border border-amber-200 text-amber-700 font-bold rounded-xl hover:bg-amber-100 transition-all"
+          >
+            Troubleshoot
+          </button>
+        </motion.div>
+      )}
+
       {isHighLoad && (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -312,7 +336,11 @@ export const Dashboard = () => {
                 <div className="flex flex-col items-end gap-2">
                   <button
                     onClick={() => toggleDevice(device.id, device.status, device.relayPin, device.name)}
-                    className="group flex items-center gap-2 focus:outline-none"
+                    disabled={hardwareId ? !isOnline : false}
+                    className={cn(
+                      "group flex items-center gap-2 focus:outline-none transition-opacity",
+                      hardwareId && !isOnline && "opacity-50 cursor-not-allowed"
+                    )}
                   >
                     <span className={cn(
                       "text-xs font-bold uppercase tracking-wider transition-colors",
@@ -359,8 +387,12 @@ export const Dashboard = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     {hardwareId ? (
-                      <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-0.5">
-                        <CheckCircle2 size={10} /> Linked
+                      <span className={cn(
+                        "text-[10px] font-bold flex items-center gap-0.5",
+                        isOnline ? "text-emerald-500" : "text-rose-500"
+                      )}>
+                        {isOnline ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+                        {isOnline ? 'Linked & Online' : 'Linked & Offline'}
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">

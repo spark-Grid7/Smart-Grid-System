@@ -25,6 +25,7 @@ export const useLoadShedding = () => {
   const [hardwareId, setHardwareId] = useState<string | null>(null);
   const [livePower, setLivePower] = useState(0);
   const [lastShedTime, setLastShedTime] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(false);
   const GRID_CAPACITY = 3000;
   const rawLoadPercentage = (livePower / GRID_CAPACITY) * 100;
   const loadPercentage = Math.min(100, Math.round(rawLoadPercentage));
@@ -63,6 +64,16 @@ export const useLoadShedding = () => {
           const i = data.current || 0;
           const p = data.power !== undefined ? data.power : (v * i);
           setLivePower(Math.round(p));
+          
+          // Check if hardware is online (sent data in last 15 seconds)
+          if (data.heartbeat) {
+            const now = Date.now();
+            setIsOnline(now - data.heartbeat < 15000);
+          } else {
+            setIsOnline(true); // Fallback for older firmware
+          }
+        } else {
+          setIsOnline(false);
         }
       });
     };
@@ -144,5 +155,5 @@ export const useLoadShedding = () => {
     (rawLoadPercentage > 75 && devices.some(d => d.priority >= 3 && !d.status))
   );
 
-  return { livePower, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId };
+  return { livePower, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId, isOnline };
 };
