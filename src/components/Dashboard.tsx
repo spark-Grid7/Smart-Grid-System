@@ -14,7 +14,9 @@ import {
   Smartphone,
   Activity,
   Link as LinkIcon,
-  Cpu
+  Cpu,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { 
@@ -140,6 +142,7 @@ export const Dashboard = () => {
           
         await set(ref(rtdb, `${basePath}/command`), newStatus ? "ON" : "OFF");
         await set(ref(rtdb, `${basePath}/status`), newStatus);
+        await set(ref(rtdb, `${basePath}/pin`), relayPin);
 
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `devices/${deviceId}`);
@@ -154,7 +157,17 @@ export const Dashboard = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Energy Dashboard</h1>
-          <p className="text-slate-500 mt-1">Real-time grid monitoring and control</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-slate-500">Real-time grid monitoring and control</p>
+            <div className="h-1 w-1 rounded-full bg-slate-300" />
+            <div className={cn(
+              "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+              isOnline ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+            )}>
+              {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+              {hardwareId ? (isOnline ? 'Hardware Online' : 'Hardware Offline') : 'Simulated Mode'}
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -211,7 +224,13 @@ export const Dashboard = () => {
             )}>
               <TrendingUp size={24} className={cn(isOnline && "animate-pulse")} />
             </div>
-            <div className="text-right">
+            <div className="text-right flex flex-col items-end gap-1">
+              {isOnline && hardwareId && (
+                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[8px] font-black uppercase tracking-tighter animate-pulse border border-blue-100">
+                  <Activity size={8} />
+                  Live Data
+                </div>
+              )}
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 {hardwareId && !isOnline ? '---' : `V: ${voltage.toFixed(1)}V | I: ${current.toFixed(2)}A`}
               </p>

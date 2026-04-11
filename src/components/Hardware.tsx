@@ -9,7 +9,9 @@ import {
   Zap,
   Activity,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -236,8 +238,8 @@ export const Hardware = () => {
                 "px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2",
                 isOnline ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
               )}>
-                <div className={cn("w-2 h-2 rounded-full animate-pulse", isOnline ? "bg-emerald-500" : "bg-rose-500")} />
-                {isOnline ? 'ONLINE' : 'OFFLINE'}
+                {isOnline ? <Wifi size={14} className="animate-pulse" /> : <WifiOff size={14} />}
+                {isOnline ? 'WIFI CONNECTED' : 'WIFI DISCONNECTED'}
               </div>
               <button 
                 onClick={() => setShowUnlinkConfirm(true)}

@@ -143,8 +143,16 @@ export const useLoadShedding = () => {
         if (data.appliances) {
           const statusMap: Record<string, boolean> = {};
           Object.entries(data.appliances).forEach(([id, app]: [string, any]) => {
-            if (app && typeof app.status === 'boolean') {
-              statusMap[id] = app.status;
+            if (app) {
+              // Priority 1: status (boolean feedback from ESP32)
+              // Priority 2: command (string "ON"/"OFF" from Dashboard)
+              if (typeof app.status === 'boolean') {
+                statusMap[id] = app.status;
+              } else if (app.command === "ON") {
+                statusMap[id] = true;
+              } else if (app.command === "OFF") {
+                statusMap[id] = false;
+              }
             }
           });
           setRtdbApplianceStatus(statusMap);
