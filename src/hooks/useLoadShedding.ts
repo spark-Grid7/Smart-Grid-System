@@ -26,6 +26,7 @@ export const useLoadShedding = () => {
   const [livePower, setLivePower] = useState(0);
   const [lastShedTime, setLastShedTime] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(false);
+  const [activePins, setActivePins] = useState<Record<string, boolean>>({});
   const GRID_CAPACITY = 3000;
   const rawLoadPercentage = (livePower / GRID_CAPACITY) * 100;
   const loadPercentage = Math.min(100, Math.round(rawLoadPercentage));
@@ -53,9 +54,14 @@ export const useLoadShedding = () => {
     const userDocRef = doc(db, 'users', auth.currentUser.uid);
     let unsubscribePower = () => {};
     
-    const setupPowerListener = (hId: string | null) => {
-      const basePath = hId ? `hardware/${hId}/grid` : `users/${auth.currentUser.uid}/grid`;
-      const gridRef = ref(rtdb, basePath);
+    const setupPowerListener = () => {
+      const basePath = `users/${auth.currentUser.uid}/hardware`;
+      const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
+      const statusRef = ref(rtdb, `${basePath}/status`);
+      const settingsRef = ref(rtdb, `${basePath}/settings`);
+      const appliancesRef = ref(rtdb, `${basePath}/appliances`);
+      
+      console.log(`[SmartGrid] Monitoring User Hardware Path: ${basePath}`);
       
       let lastHeartbeatVal = 0;
 
@@ -63,51 +69,72 @@ export const useLoadShedding = () => {
       const watchdog = setInterval(() => {
         if (lastHeartbeatVal > 0) {
           const now = Date.now();
-          if (Math.abs(now - lastHeartbeatVal) > 30000) {
-            setIsOnline(false);
-          }
+          // The ESP32 sends millis() to lastSeen, which isn't a wall clock time.
+          // We should rely on the heartbeat or a simple online flag.
+          // However, the ESP32 code provided sets isOnline = true in loop.
         }
       }, 5000);
       
-      const unsub = onValue(gridRef, (snapshot) => {
+      const unsubSensors = onValue(sensorsRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
-          const v = data.voltage || 0;
-          const i = data.current || 0;
-          const p = data.power !== undefined ? data.power : (v * i);
+          // The ESP32 code sends power in kW (power / 1000.0)
+          const p = (data.power || 0) * 1000; 
           setLivePower(Math.round(p));
-          
-          // Check heartbeat (server timestamp)
-          if (data.heartbeat) {
-            lastHeartbeatVal = data.heartbeat;
-            const now = Date.now();
-            const isRecent = Math.abs(now - data.heartbeat) < 30000;
-            setIsOnline(isRecent);
-          } else {
-            setIsOnline(true);
-          }
+          setVoltage(data.voltage || 0);
+          setCurrent(data.current || 0);
+        }
+      });
+
+      const unsubStatus = onValue(statusRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          setIsOnline(data.isOnline || false);
+          // We can't easily use lastSeen (millis) for wall clock comparison
+          // but we can assume if isOnline is true, it's recently updated.
         } else {
           setIsOnline(false);
-          setLivePower(0);
+        }
+      });
+
+      const unsubSettings = onValue(settingsRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          setEcoMode(data.ecoMode || false);
+        }
+      });
+
+      const unsubAppliances = onValue(appliancesRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const pins: Record<string, boolean> = {};
+          Object.values(data).forEach((app: any) => {
+            if (app.pin !== undefined) {
+              pins[app.pin] = true; // Mark this pin as "configured" on hardware
+            }
+          });
+          setActivePins(pins);
+        } else {
+          setActivePins({});
         }
       });
 
       return () => {
-        unsub();
+        unsubSensors();
+        unsubStatus();
+        unsubSettings();
+        unsubAppliances();
         clearInterval(watchdog);
       };
     };
 
+    unsubscribePower = setupPowerListener();
+
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        setEcoMode(data.ecoMode || false);
         const hId = data.hardwareId || null;
         setHardwareId(hId);
-        
-        // Update power listener when hardwareId changes
-        unsubscribePower();
-        unsubscribePower = setupPowerListener(hId);
       }
     });
 
@@ -118,6 +145,10 @@ export const useLoadShedding = () => {
     };
   }, []);
 
+  // Add these state variables to the hook
+  const [voltage, setVoltage] = useState(0);
+  const [current, setCurrent] = useState(0);
+
   useEffect(() => {
     if (!ecoMode || devices.length === 0) return;
 
@@ -126,35 +157,34 @@ export const useLoadShedding = () => {
       let changed = false;
       
       for (const device of devices) {
-        // Priority 3 = Low, Priority 2 = Medium, Priority 1 = High
-        let shouldBeOff = false;
+        // Priority 1 = High, Priority 2 = Medium, Priority 3 = Low
+        // User's ESP32 code: 
+        // if (power > SHED_75) controlByPriority(4, false);
+        // if (power > SHED_85) controlByPriority(3, false);
+        // if (power > POWER_LIMIT) controlByPriority(2, false);
         
-        if (rawLoadPercentage > 85) {
-          // Shed Low (3) and Medium (2)
+        let shouldBeOff = false;
+        const p = livePower;
+        const limit = 4000; // Matching ESP32 POWER_LIMIT
+        
+        if (p > limit) {
           if (device.priority >= 2) shouldBeOff = true;
-        } else if (rawLoadPercentage > 75) {
-          // Shed Low (3) only
+        } else if (p > (limit * 0.85)) {
+          if (device.priority >= 3) shouldBeOff = true;
+        } else if (p > (limit * 0.75)) {
+          // The user's code has controlByPriority(4, false) for SHED_75
+          // If we only have 1, 2, 3, then priority 4 doesn't exist.
+          // We'll stick to the logic: 75% -> Low (3), 85% -> Med (2)
           if (device.priority >= 3) shouldBeOff = true;
         }
 
         if (shouldBeOff && device.status) {
-          // Skip shedding if the device has no relay pin set
-          if (device.relayPin === undefined || device.relayPin === null) continue;
-          
-          const pin = device.relayPin;
           const deviceRef = doc(db, 'devices', device.id);
-          
-          const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
-          const rtdbRef = ref(rtdb, `${basePath}/devices/${pin}`);
+          const basePath = `users/${auth.currentUser.uid}/hardware`;
+          const rtdbRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
           
           updates.push(updateDoc(deviceRef, { status: false }));
-          updates.push(set(rtdbRef, false));
-
-          // If this is a motor/pump, update the global motor status too
-          if (device.name.toLowerCase().includes('motor') || device.name.toLowerCase().includes('pump')) {
-            const motorRef = ref(rtdb, `${basePath}/grid/motor_status`);
-            updates.push(set(motorRef, false));
-          }
+          updates.push(set(rtdbRef, "OFF"));
 
           changed = true;
         }
@@ -171,12 +201,12 @@ export const useLoadShedding = () => {
     };
 
     enforceShedding();
-  }, [rawLoadPercentage, ecoMode, devices]);
+  }, [livePower, ecoMode, devices]);
 
   const isShedding = ecoMode && (
-    (rawLoadPercentage > 85 && devices.some(d => d.priority >= 2 && !d.status)) ||
-    (rawLoadPercentage > 75 && devices.some(d => d.priority >= 3 && !d.status))
+    (livePower > 3400 && devices.some(d => d.priority >= 2 && !d.status)) ||
+    (livePower > 3000 && devices.some(d => d.priority >= 3 && !d.status))
   );
 
-  return { livePower, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId, isOnline };
+  return { livePower, voltage, current, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId, isOnline, activePins };
 };

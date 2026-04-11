@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { ref, onValue, set } from 'firebase/database';
+import { db, auth, rtdb } from '../firebase';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -24,32 +25,42 @@ function cn(...inputs: ClassValue[]) {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Hardware = () => {
-  const { isOnline } = useLoadShedding();
+  const { isOnline, hardwareId: linkedId } = useLoadShedding();
   const [hardwareId, setHardwareId] = useState('');
   const [isLinking, setIsLinking] = useState(false);
-  const [linkedId, setLinkedId] = useState<string | null>(null);
+  const [isPhysicallyLinked, setIsPhysicallyLinked] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribe = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        setLinkedId(doc.data().hardwareId || null);
-      }
+    const basePath = `users/${auth.currentUser.uid}/hardware`;
+    const linkedRef = ref(rtdb, `${basePath}/status/isLinked`);
+    
+    const unsub = onValue(linkedRef, (snapshot) => {
+      setIsPhysicallyLinked(snapshot.val() || false);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
   const handleLinkHardware = async () => {
     if (!auth.currentUser || !hardwareId.trim()) return;
     setIsLinking(true);
     try {
-      const userDocRef = doc(db, 'users', auth.currentUser.uid);
-      await updateDoc(userDocRef, { hardwareId: hardwareId.trim().toUpperCase() });
+      const uid = auth.currentUser.uid;
+      const mac = hardwareId.trim().toUpperCase();
+      
+      // 1. Update Firestore for the UI
+      const userDocRef = doc(db, 'users', uid);
+      await updateDoc(userDocRef, { hardwareId: mac });
+      
+      // 2. Update RTDB for the ESP32 to verify
+      const basePath = `users/${uid}/hardware`;
+      await set(ref(rtdb, `${basePath}/settings/macAddress`), mac);
+      await set(ref(rtdb, `${basePath}/status/isLinked`), false); // Reset until ESP32 confirms
+      
       setHardwareId('');
     } catch (error) {
       console.error("Linking failed", error);
@@ -64,8 +75,13 @@ export const Hardware = () => {
     
     setIsLinking(true);
     try {
-      const userDocRef = doc(db, 'users', auth.currentUser.uid);
+      const uid = auth.currentUser.uid;
+      const userDocRef = doc(db, 'users', uid);
       await updateDoc(userDocRef, { hardwareId: null });
+      
+      const basePath = `users/${uid}/hardware`;
+      await set(ref(rtdb, `${basePath}/settings/macAddress`), null);
+      await set(ref(rtdb, `${basePath}/status/isLinked`), false);
     } catch (error) {
       console.error("Unlinking failed", error);
     } finally {
@@ -158,24 +174,36 @@ export const Hardware = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="flex items-center gap-6">
               <div className="bg-emerald-500 p-5 rounded-3xl text-white shadow-lg shadow-emerald-200">
-                {isOnline ? <CheckCircle2 size={32} /> : <AlertCircle size={32} className="text-white" />}
+                {isPhysicallyLinked ? <CheckCircle2 size={32} /> : <AlertCircle size={32} className="text-white" />}
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-slate-900">
-                  {isOnline ? 'Device Online' : 'Device Offline'}
+                  {isPhysicallyLinked ? 'Device Linked' : 'Linking Pending'}
                 </h2>
                 <p className="text-slate-500">
-                  {isOnline 
-                    ? 'Your dashboard is currently receiving real-time data.' 
-                    : 'Hardware is linked but not communicating. Check WiFi.'}
+                  {isPhysicallyLinked 
+                    ? 'Your hardware has verified the MAC address and is fully linked.' 
+                    : 'Hardware linked in dashboard, but ESP32 hasn\'t confirmed yet.'}
                 </p>
-                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-lg text-slate-600 font-mono font-bold text-sm">
-                  ID: {linkedId}
+                <div className="mt-2 flex flex-col gap-1">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-lg text-slate-600 font-mono font-bold text-sm w-fit">
+                    ID: {linkedId}
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-mono mt-1">
+                    Realtime Database Path: <span className="text-emerald-600">/users/{auth.currentUser?.uid}/hardware</span>
+                  </p>
                 </div>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+              <div className={cn(
+                "px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2",
+                isOnline ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+              )}>
+                <div className={cn("w-2 h-2 rounded-full animate-pulse", isOnline ? "bg-emerald-500" : "bg-rose-500")} />
+                {isOnline ? 'ONLINE' : 'OFFLINE'}
+              </div>
               <button 
                 onClick={handleUnlink}
                 disabled={isLinking}

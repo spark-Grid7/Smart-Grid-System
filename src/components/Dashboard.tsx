@@ -40,14 +40,11 @@ import { DevicePower } from './DevicePower';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
-  const { livePower, loadPercentage, ecoMode, devices, hardwareId, isOnline } = useLoadShedding();
+  const { livePower, voltage, current, loadPercentage, ecoMode, devices, hardwareId, isOnline, activePins } = useLoadShedding();
   const [gridStatus, setGridStatus] = useState<'stable' | 'critical'>('stable');
-  const [voltage, setVoltage] = useState(0);
-  const [current, setCurrent] = useState(0);
-  const [motorStatus, setMotorStatus] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const GRID_CAPACITY = 3000; // Max Watts before warning
+  const GRID_CAPACITY = 4000; // Matching ESP32 POWER_LIMIT
   const isHighLoad = loadPercentage > 85;
 
   useEffect(() => {
@@ -55,84 +52,64 @@ export const Dashboard = () => {
 
     // Self-healing: Ensure the branch exists on load
     const initializeIfMissing = async () => {
-      const basePath = hardwareId ? `hardware/${hardwareId}/grid` : `users/${auth.currentUser.uid}/grid`;
-      const gridRef = ref(rtdb, basePath);
-      const snapshot = await get(gridRef);
+      const basePath = `users/${auth.currentUser.uid}/hardware`;
+      const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
+      const snapshot = await get(sensorsRef);
       if (!snapshot.exists()) {
-        await set(gridRef, {
+        await set(sensorsRef, {
           power: 0,
           voltage: 0,
-          current: 0,
-          status: 'stable',
-          motor_status: false,
-          heartbeat: 0
+          current: 0
+        });
+        await set(ref(rtdb, `${basePath}/status`), {
+          isOnline: false,
+          isLinked: false,
+          lastSeen: 0
+        });
+        await set(ref(rtdb, `${basePath}/settings`), {
+          ecoMode: false,
+          macAddress: ""
         });
       }
     };
     initializeIfMissing();
 
-    // Listen for Voltage and Current (from hardware or user path)
-    const setupListeners = (hId: string | null) => {
-      const basePath = hId ? `hardware/${hId}/grid` : `users/${auth.currentUser.uid}/grid`;
-      
-      const vRef = ref(rtdb, `${basePath}/voltage`);
-      const cRef = ref(rtdb, `${basePath}/current`);
-      const mRef = ref(rtdb, `${basePath}/motor_status`);
-      const sRef = ref(rtdb, `${basePath}/status`);
-
-      const unsubV = onValue(vRef, s => s.exists() && setVoltage(s.val()));
-      const unsubC = onValue(cRef, s => s.exists() && setCurrent(s.val()));
-      const unsubM = onValue(mRef, s => s.exists() && setMotorStatus(s.val()));
-      const unsubS = onValue(sRef, s => s.exists() && setGridStatus(s.val()));
-
-      return () => {
-        unsubV();
-        unsubC();
-        unsubM();
-        unsubS();
-      };
-    };
-
-    let cleanupListeners = setupListeners(hardwareId);
-
     setLoading(false);
-
-    return () => {
-      cleanupListeners();
-    };
-  }, [hardwareId]);
+  }, []);
 
   const toggleEcoMode = async () => {
     if (!auth.currentUser) return;
     try {
-      const userDocRef = doc(db, 'users', auth.currentUser.uid);
-      await updateDoc(userDocRef, { ecoMode: !ecoMode });
+      const uid = auth.currentUser.uid;
+      const userDocRef = doc(db, 'users', uid);
+      const newEco = !ecoMode;
+      await updateDoc(userDocRef, { ecoMode: newEco });
+      
+      // Sync to RTDB for ESP32
+      const basePath = `users/${uid}/hardware/settings/ecoMode`;
+      await set(ref(rtdb, basePath), newEco);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
     }
   };
 
     const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number, name: string) => {
-      if (hardwareId && !isOnline) return;
-      
-      const pin = (relayPin !== undefined && relayPin !== null) ? relayPin : 0;
+      if (!auth.currentUser) return;
       
       try {
+        const uid = auth.currentUser.uid;
         const deviceRef = doc(db, 'devices', deviceId);
         const newStatus = !currentStatus;
         
         // Update Firestore
         await updateDoc(deviceRef, { status: newStatus });
         
-        // Update Realtime Database
-        const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
-        const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${pin}`);
-        await set(rtdbDeviceRef, newStatus);
+        // Update Realtime Database for ESP32
+        const basePath = `users/${uid}/hardware/appliances/${deviceId}`;
+        await set(ref(rtdb, `${basePath}/command`), newStatus ? "ON" : "OFF");
+        // Also update the status field so the ESP32 knows the current target state
+        await set(ref(rtdb, `${basePath}/status`), newStatus);
 
-        if (name.toLowerCase().includes('motor') || name.toLowerCase().includes('pump')) {
-          const motorRef = ref(rtdb, `${basePath}/grid/motor_status`);
-          await set(motorRef, newStatus);
-        }
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `devices/${deviceId}`);
       }
@@ -201,7 +178,7 @@ export const Dashboard = () => {
               <TrendingUp size={24} />
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V: {voltage}V | I: {current}A</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V: {voltage.toFixed(1)}V | I: {current.toFixed(2)}A</p>
             </div>
           </div>
           <h3 className="text-slate-500 text-xs font-medium">Live Power</h3>
@@ -219,9 +196,9 @@ export const Dashboard = () => {
             </div>
             <div className={cn(
               "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-              motorStatus ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+              ecoMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
             )}>
-              {motorStatus ? 'Motor: ON' : 'Motor: OFF'}
+              {ecoMode ? 'Eco: Active' : 'Eco: Off'}
             </div>
           </div>
           <h3 className="text-slate-500 text-xs font-medium">Daily Cost</h3>
@@ -285,6 +262,11 @@ export const Dashboard = () => {
           <p className="text-lg font-bold text-slate-900 mt-1 truncate">
             {hardwareId ? hardwareId : 'Simulated'}
           </p>
+          {auth.currentUser && (
+            <p className="text-[10px] text-slate-400 mt-1 font-mono">
+              RTDB: /users/{auth.currentUser.uid}/hardware
+            </p>
+          )}
         </motion.div>
       </div>
 
@@ -421,10 +403,10 @@ export const Dashboard = () => {
                     {hardwareId ? (
                       <span className={cn(
                         "text-[10px] font-bold flex items-center gap-0.5",
-                        isOnline ? "text-emerald-500" : "text-rose-500"
+                        (isOnline && activePins[device.relayPin]) ? "text-emerald-500" : "text-rose-500"
                       )}>
-                        {isOnline ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
-                        {isOnline ? 'Linked & Online' : 'Linked & Offline'}
+                        {(isOnline && activePins[device.relayPin]) ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+                        {(isOnline && activePins[device.relayPin]) ? 'Linked & Online' : 'Linked & Offline'}
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">

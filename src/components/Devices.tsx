@@ -45,7 +45,7 @@ interface Device {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Devices = () => {
-  const { devices, hardwareId, isOnline } = useLoadShedding();
+  const { devices, hardwareId, isOnline, activePins } = useLoadShedding();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDevice, setNewDevice] = useState({
     name: '',
@@ -59,18 +59,23 @@ export const Devices = () => {
     if (!auth.currentUser) return;
 
     try {
-      await addDoc(collection(db, 'devices'), {
+      const docRef = await addDoc(collection(db, 'devices'), {
         ...newDevice,
         userId: auth.currentUser.uid,
         status: false,
         createdAt: serverTimestamp()
       });
 
-      // Sync initial status to Realtime Database
-      // Use hardware path if linked, otherwise user path
-      const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
-      const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${newDevice.relayPin}`);
-      await set(rtdbDeviceRef, false);
+      // Sync to Realtime Database for ESP32
+      const uid = auth.currentUser.uid;
+      const basePath = `users/${uid}/hardware/appliances/${docRef.id}`;
+      await set(ref(rtdb, basePath), {
+        pin: newDevice.relayPin,
+        priority: newDevice.priority,
+        status: false,
+        enabled: true,
+        command: "NONE"
+      });
 
       setShowAddModal(false);
       setNewDevice({ name: '', type: 'Other', relayPin: 0, priority: 2 });
@@ -82,16 +87,9 @@ export const Devices = () => {
   const handleDeleteDevice = async (id: string) => {
     if (!auth.currentUser) return;
     try {
-      const basePath = hardwareId ? `hardware/${hardwareId}` : `users/${auth.currentUser.uid}`;
-
-      // Get device info first to find relayPin
-      const deviceDoc = await getDoc(doc(db, 'devices', id));
-      if (deviceDoc.exists()) {
-        const relayPin = deviceDoc.data().relayPin;
-        // Remove from Realtime Database
-        const rtdbDeviceRef = ref(rtdb, `${basePath}/devices/${relayPin}`);
-        await remove(rtdbDeviceRef);
-      }
+      const uid = auth.currentUser.uid;
+      const basePath = `users/${uid}/hardware/appliances/${id}`;
+      await set(ref(rtdb, basePath), null);
 
       await deleteDoc(doc(db, 'devices', id));
     } catch (error) {
@@ -181,10 +179,10 @@ export const Devices = () => {
                         {hardwareId ? (
                           <div className={cn(
                             "flex items-center gap-1.5 font-bold text-sm",
-                            isOnline ? "text-emerald-600" : "text-rose-500"
+                            (isOnline && activePins[device.relayPin]) ? "text-emerald-600" : "text-rose-500"
                           )}>
-                            {isOnline ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                            {isOnline ? 'Linked & Online' : 'Linked & Offline'}
+                            {(isOnline && activePins[device.relayPin]) ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                            {(isOnline && activePins[device.relayPin]) ? 'Linked & Online' : 'Linked & Offline'}
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 text-slate-400 font-bold text-sm">
