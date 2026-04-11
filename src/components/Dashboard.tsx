@@ -52,28 +52,51 @@ export const Dashboard = () => {
 
     // Self-healing: Ensure the branch exists on load
     const initializeIfMissing = async () => {
-      if (!hardwareId) return;
-      const basePath = `users/${auth.currentUser.uid}/hardware/${hardwareId}`;
-      const statusRef = ref(rtdb, `${basePath}/status`);
-      const snapshot = await get(statusRef);
+      if (!auth.currentUser) return;
+      const uid = auth.currentUser.uid;
+      const basePath = hardwareId 
+        ? `users/${uid}/hardware/${hardwareId}`
+        : `users/${uid}/hardware`;
+      
+      const hardwareRef = ref(rtdb, basePath);
+      const snapshot = await get(hardwareRef);
+      
+      // Prepare appliances data from current Firestore devices
+      const appliances: Record<string, any> = {};
+      devices.forEach(d => {
+        appliances[d.id] = {
+          name: d.name,
+          pin: d.relayPin,
+          priority: d.priority,
+          status: d.status,
+          command: d.status ? "ON" : "OFF"
+        };
+      });
+
       if (!snapshot.exists()) {
-        await set(ref(rtdb, basePath), {
+        await set(hardwareRef, {
           sensors: {
-            realtime: { power: 0, voltage: 0, current: 0 }
+            realtime: { power: 0, voltage: 230, current: 0 }
           },
           status: {
-            isOnline: false,
-            isLinked: false,
-            lastSeen: 0,
+            isOnline: !hardwareId, // Always online in simulation mode
+            isLinked: !!hardwareId,
+            lastSeen: Date.now(),
             verified_pins: {}
           },
           settings: {
-            ecoMode: false,
-            macAddress: hardwareId
+            ecoMode: ecoMode,
+            macAddress: hardwareId || "SIMULATED"
           },
-          appliances: {},
+          appliances: appliances,
           schedules: {}
         });
+      } else {
+        // Even if it exists, ensure appliances are synced if the folder is empty or missing
+        const data = snapshot.val();
+        if (!data.appliances || Object.keys(data.appliances).length === 0) {
+          await set(ref(rtdb, `${basePath}/appliances`), appliances);
+        }
       }
     };
     initializeIfMissing();
@@ -82,15 +105,17 @@ export const Dashboard = () => {
   }, []);
 
   const toggleEcoMode = async () => {
-    if (!auth.currentUser || !hardwareId) return;
+    if (!auth.currentUser) return;
     try {
       const uid = auth.currentUser.uid;
       const userDocRef = doc(db, 'users', uid);
       const newEco = !ecoMode;
       await updateDoc(userDocRef, { ecoMode: newEco });
       
-      // Sync to RTDB for ESP32
-      const basePath = `users/${uid}/hardware/${hardwareId}/settings/ecoMode`;
+      // Sync to RTDB
+      const basePath = hardwareId 
+        ? `users/${uid}/hardware/${hardwareId}/settings/ecoMode`
+        : `users/${uid}/hardware/settings/ecoMode`;
       await set(ref(rtdb, basePath), newEco);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
@@ -98,7 +123,7 @@ export const Dashboard = () => {
   };
 
     const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number, name: string) => {
-      if (!auth.currentUser || !hardwareId) return;
+      if (!auth.currentUser) return;
       
       try {
         const uid = auth.currentUser.uid;
@@ -108,10 +133,12 @@ export const Dashboard = () => {
         // Update Firestore
         await updateDoc(deviceRef, { status: newStatus });
         
-        // Update Realtime Database for ESP32
-        const basePath = `users/${uid}/hardware/${hardwareId}/appliances/${deviceId}`;
+        // Update Realtime Database
+        const basePath = hardwareId 
+          ? `users/${uid}/hardware/${hardwareId}/appliances/${deviceId}`
+          : `users/${uid}/hardware/appliances/${deviceId}`;
+          
         await set(ref(rtdb, `${basePath}/command`), newStatus ? "ON" : "OFF");
-        // Also update the status field so the ESP32 knows the current target state
         await set(ref(rtdb, `${basePath}/status`), newStatus);
 
       } catch (error) {

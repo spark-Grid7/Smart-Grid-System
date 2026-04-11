@@ -69,10 +69,27 @@ export const useLoadShedding = () => {
       const unsubSensors = onValue(sensorsRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
-          const p = (data.power || 0) * 1000; 
-          setLivePower(Math.round(p));
-          setVoltage(data.voltage || 0);
-          setCurrent(data.current || 0);
+          // If data is a number, it might be the power directly (old structure)
+          // If it's an object, it's the new structure
+          if (typeof data === 'number') {
+            const p = data > 20 ? data : data * 1000;
+            setLivePower(Math.round(p));
+          } else {
+            const p = (data.power || 0);
+            const finalP = p > 20 ? p : p * 1000;
+            setLivePower(Math.round(finalP));
+            setVoltage(data.voltage || 230);
+            setCurrent(data.current || (finalP / 230));
+          }
+        } else {
+          // Fallback for very old structure or manual root typing
+          onValue(ref(rtdb, `${basePath}/power`), (snap) => {
+            if (snap.exists()) {
+              const val = snap.val();
+              const p = val > 20 ? val : val * 1000;
+              setLivePower(Math.round(p));
+            }
+          }, { onlyOnce: true });
         }
       });
 
@@ -162,7 +179,10 @@ export const useLoadShedding = () => {
 
         if (shouldBeOff && device.status) {
           const deviceRef = doc(db, 'devices', device.id);
-          const basePath = `users/${auth.currentUser.uid}/hardware`;
+          const basePath = hardwareId 
+            ? `users/${auth.currentUser.uid}/hardware/${hardwareId}`
+            : `users/${auth.currentUser.uid}/hardware`;
+          
           const rtdbRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
           
           updates.push(updateDoc(deviceRef, { status: false }));

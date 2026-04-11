@@ -9,7 +9,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc } from 'firebase/firestore';
 import { ref, onValue } from 'firebase/database';
 import { db, auth, rtdb, handleFirestoreError, OperationType } from '../firebase';
 import { clsx, type ClassValue } from 'clsx';
