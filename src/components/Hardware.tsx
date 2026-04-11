@@ -178,12 +178,12 @@ export const Hardware = () => {
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-slate-900">
-                  {isPhysicallyLinked ? 'Device Linked' : 'Linking Pending'}
+                  {isPhysicallyLinked ? 'Hardware Verified' : 'Registration Pending'}
                 </h2>
                 <p className="text-slate-500">
                   {isPhysicallyLinked 
-                    ? 'Your hardware has verified the MAC address and is fully linked.' 
-                    : 'Hardware linked in dashboard, but ESP32 hasn\'t confirmed yet.'}
+                    ? 'Your ESP32 has confirmed the link and is communicating.' 
+                    : 'The dashboard is waiting for your ESP32 to connect and verify its MAC address.'}
                 </p>
                 <div className="mt-2 flex flex-col gap-1">
                   <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-lg text-slate-600 font-mono font-bold text-sm w-fit">

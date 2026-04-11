@@ -403,14 +403,20 @@ export const Dashboard = () => {
                     {hardwareId ? (
                       <span className={cn(
                         "text-[10px] font-bold flex items-center gap-0.5",
-                        (isOnline && activePins[device.relayPin]) ? "text-emerald-500" : "text-rose-500"
+                        isOnline 
+                          ? (activePins[device.relayPin] ? "text-emerald-500" : "text-amber-500") 
+                          : "text-rose-500"
                       )}>
-                        {(isOnline && activePins[device.relayPin]) ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
-                        {(isOnline && activePins[device.relayPin]) ? 'Linked & Online' : 'Linked & Offline'}
+                        {isOnline 
+                          ? (activePins[device.relayPin] ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />) 
+                          : <Unlink size={10} />}
+                        {isOnline 
+                          ? (activePins[device.relayPin] ? 'Linked & Online' : 'Pin Not Verified') 
+                          : 'Hardware Offline'}
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold text-slate-400 flex items-center gap-0.5">
-                        <Unlink size={10} /> Simulated
+                        <Activity size={10} /> Simulated Mode
                       </span>
                     )}
                   </div>

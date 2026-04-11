@@ -27,7 +27,7 @@ export const useLoadShedding = () => {
   const [lastShedTime, setLastShedTime] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [activePins, setActivePins] = useState<Record<string, boolean>>({});
-  const GRID_CAPACITY = 3000;
+  const GRID_CAPACITY = 4000;
   const rawLoadPercentage = (livePower / GRID_CAPACITY) * 100;
   const loadPercentage = Math.min(100, Math.round(rawLoadPercentage));
 
