@@ -78,7 +78,7 @@ export const useLoadShedding = () => {
       const hardwareRef = ref(rtdb, basePath);
       const rootRef = mac ? ref(rtdb, mac) : null;
       
-      const handleData = (snapshot: any) => {
+      const handleData = (snapshot: any, isRoot: boolean) => {
         if (!snapshot.exists()) return false;
 
         const data = snapshot.val();
@@ -125,10 +125,12 @@ export const useLoadShedding = () => {
 
         // 2. Handle Status & Online State
         if (status) {
-          const lastSeen = status.lastSeen || 0;
+          const lastSeen = status.lastSeen;
           const now = Date.now();
-          // Consider offline if no heartbeat for 30 seconds (more lenient)
-          const isRecentlySeen = (now - lastSeen) < 30000;
+          
+          // CRITICAL FIX: If lastSeen is missing, trust isOnline flag if data is arriving.
+          // If lastSeen is present, check if it's within 60 seconds (more lenient).
+          const isRecentlySeen = lastSeen ? (now - lastSeen < 60000) : true;
           
           setIsOnline((status.isOnline || false) && isRecentlySeen);
           
@@ -169,10 +171,13 @@ export const useLoadShedding = () => {
         return true;
       };
 
+      // Use a single state to track if we found data in EITHER path
+      let primaryFound = false;
+      let rootFound = false;
+
       const unsubPrimary = onValue(hardwareRef, (snapshot) => {
-        const found = handleData(snapshot);
-        // If not found in primary path and we have a root ref, the root listener will handle it
-        if (!found && !rootRef) {
+        primaryFound = handleData(snapshot, false);
+        if (!primaryFound && !rootFound) {
           setIsOnline(false);
           setLivePower(0);
         }
@@ -181,9 +186,11 @@ export const useLoadShedding = () => {
       let unsubRoot = () => {};
       if (rootRef) {
         unsubRoot = onValue(rootRef, (snapshot) => {
-          // Only use root data if primary path is empty
-          const primaryExists = hardwareRef.key ? false : true; // Simplified check
-          handleData(snapshot);
+          rootFound = handleData(snapshot, true);
+          if (!primaryFound && !rootFound) {
+            setIsOnline(false);
+            setLivePower(0);
+          }
         });
       }
 
