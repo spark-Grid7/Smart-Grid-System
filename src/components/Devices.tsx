@@ -70,6 +70,7 @@ export const Devices = () => {
       const uid = auth.currentUser.uid;
       const basePath = `users/${uid}/hardware/appliances/${docRef.id}`;
       await set(ref(rtdb, basePath), {
+        name: newDevice.name,
         pin: newDevice.relayPin,
         priority: newDevice.priority,
         status: false,

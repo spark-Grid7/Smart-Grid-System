@@ -104,16 +104,9 @@ export const useLoadShedding = () => {
         }
       });
 
-      const unsubAppliances = onValue(appliancesRef, (snapshot) => {
+      const unsubAppliances = onValue(ref(rtdb, `${basePath}/status/verified_pins`), (snapshot) => {
         if (snapshot.exists()) {
-          const data = snapshot.val();
-          const pins: Record<string, boolean> = {};
-          Object.values(data).forEach((app: any) => {
-            if (app.pin !== undefined) {
-              pins[app.pin] = true; // Mark this pin as "configured" on hardware
-            }
-          });
-          setActivePins(pins);
+          setActivePins(snapshot.val());
         } else {
           setActivePins({});
         }
@@ -168,13 +161,13 @@ export const useLoadShedding = () => {
         const limit = 4000; // Matching ESP32 POWER_LIMIT
         
         if (p > limit) {
-          if (device.priority >= 2) shouldBeOff = true;
+          // Shed High (1), Medium (2), and Low (3)
+          if (device.priority >= 1) shouldBeOff = true;
         } else if (p > (limit * 0.85)) {
-          if (device.priority >= 3) shouldBeOff = true;
-        } else if (p > (limit * 0.75)) {
-          // The user's code has controlByPriority(4, false) for SHED_75
-          // If we only have 1, 2, 3, then priority 4 doesn't exist.
-          // We'll stick to the logic: 75% -> Low (3), 85% -> Med (2)
+          // Shed Medium (2) and Low (3)
+          if (device.priority >= 2) shouldBeOff = true;
+        } else if (p > (limit * 0.50)) {
+          // Shed Low (3) only
           if (device.priority >= 3) shouldBeOff = true;
         }
 

@@ -263,7 +263,7 @@ export const Dashboard = () => {
             {hardwareId ? hardwareId : 'Simulated'}
           </p>
           {auth.currentUser && (
-            <p className="text-[10px] text-slate-400 mt-1 font-mono">
+            <p className="text-[10px] text-slate-400 mt-1 font-mono break-all">
               RTDB: /users/{auth.currentUser.uid}/hardware
             </p>
           )}
