@@ -324,7 +324,7 @@ export const Dashboard = () => {
           </p>
           {auth.currentUser && (
             <p className="text-[10px] text-slate-400 mt-1 font-mono break-all">
-              RTDB: /users/{auth.currentUser.uid}/hardware{hardwareId ? `/${hardwareId}` : ''}
+              RTDB: {isOnline ? (hardwareId ? `/${hardwareId} (Root Fallback)` : `/users/${auth.currentUser.uid}/hardware`) : `/users/${auth.currentUser.uid}/hardware/${hardwareId}`}
             </p>
           )}
         </motion.div>

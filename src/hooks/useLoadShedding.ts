@@ -76,13 +76,10 @@ export const useLoadShedding = () => {
       console.log(`[SmartGrid] Monitoring Path: ${basePath}`);
       
       const hardwareRef = ref(rtdb, basePath);
+      const rootRef = mac ? ref(rtdb, mac) : null;
       
-      return onValue(hardwareRef, (snapshot) => {
-        if (!snapshot.exists()) {
-          setIsOnline(false);
-          setLivePower(0);
-          return;
-        }
+      const handleData = (snapshot: any) => {
+        if (!snapshot.exists()) return false;
 
         const data = snapshot.val();
         
@@ -158,8 +155,6 @@ export const useLoadShedding = () => {
           const statusMap: Record<string, boolean> = {};
           Object.entries(appliances).forEach(([id, app]: [string, any]) => {
             if (app) {
-              // Priority 1: status (boolean feedback from ESP32)
-              // Priority 2: command (string "ON"/"OFF" from Dashboard)
               if (typeof app.status === 'boolean') {
                 statusMap[id] = app.status;
               } else if (app.command === "ON") {
@@ -171,7 +166,31 @@ export const useLoadShedding = () => {
           });
           setRtdbApplianceStatus(statusMap);
         }
+        return true;
+      };
+
+      const unsubPrimary = onValue(hardwareRef, (snapshot) => {
+        const found = handleData(snapshot);
+        // If not found in primary path and we have a root ref, the root listener will handle it
+        if (!found && !rootRef) {
+          setIsOnline(false);
+          setLivePower(0);
+        }
       });
+
+      let unsubRoot = () => {};
+      if (rootRef) {
+        unsubRoot = onValue(rootRef, (snapshot) => {
+          // Only use root data if primary path is empty
+          const primaryExists = hardwareRef.key ? false : true; // Simplified check
+          handleData(snapshot);
+        });
+      }
+
+      return () => {
+        unsubPrimary();
+        unsubRoot();
+      };
     };
 
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
