@@ -90,6 +90,7 @@ export const useLoadShedding = () => {
       
       const hardwareRef = ref(rtdb, basePath);
       const rootRef = mac ? ref(rtdb, mac) : null;
+      const powerRootRef = ref(rtdb, 'power'); // Listen to root 'power' node if it exists
       
       const handleData = (snapshot: any) => {
         if (!snapshot.exists()) return null;
@@ -97,12 +98,23 @@ export const useLoadShedding = () => {
         const data = snapshot.val();
         
         // DEEP SEARCH: Find power, voltage, current anywhere in the object
-        // This handles cases where the ESP32 might be writing to a different nested structure
         const findValue = (obj: any, keys: string[]): any => {
-          if (!obj || typeof obj !== 'object') return undefined;
+          if (obj === null || obj === undefined) return undefined;
+          
+          // If it's a direct number or string that can be a number
+          if (typeof obj === 'number') return obj;
+          if (typeof obj === 'string' && !isNaN(parseFloat(obj))) return parseFloat(obj);
+
+          if (typeof obj !== 'object') return undefined;
+
           for (const key of keys) {
-            if (obj[key] !== undefined) return obj[key];
+            if (obj[key] !== undefined) {
+              const val = obj[key];
+              if (typeof val === 'number') return val;
+              if (typeof val === 'string' && !isNaN(parseFloat(val))) return parseFloat(val);
+            }
           }
+
           for (const key in obj) {
             const val = findValue(obj[key], keys);
             if (val !== undefined) return val;
@@ -110,9 +122,9 @@ export const useLoadShedding = () => {
           return undefined;
         };
 
-        let p = findValue(data, ['power', 'p', 'watts', 'P', 'realtime_power']) ?? 0;
-        let v = findValue(data, ['voltage', 'v', 'V', 'volts']) ?? 230;
-        let i = findValue(data, ['current', 'i', 'I', 'amps']) ?? 0;
+        let p = findValue(data, ['power', 'p', 'watts', 'P', 'realtime_power', 'value', 'data', 'load']) ?? 0;
+        let v = findValue(data, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
+        let i = findValue(data, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
 
         // Support nested 'info' or 'sensors' if found
         const sensors = data.sensors || data.info?.sensors;
@@ -122,9 +134,13 @@ export const useLoadShedding = () => {
 
         if (sensors?.realtime) {
           const rt = sensors.realtime;
-          p = typeof rt === 'number' ? rt : (rt.power ?? p);
-          v = rt.voltage ?? v;
-          i = rt.current ?? i;
+          const nestedP = findValue(rt, ['power', 'p', 'watts', 'P']);
+          const nestedV = findValue(rt, ['voltage', 'v', 'V', 'volts']);
+          const nestedI = findValue(rt, ['current', 'i', 'I', 'amps']);
+          
+          p = nestedP ?? p;
+          v = nestedV ?? v;
+          i = nestedI ?? i;
         }
 
         // Scaling logic: if < 20, assume kW and convert to W
@@ -136,46 +152,62 @@ export const useLoadShedding = () => {
         if (status) {
           const lastSeen = status.lastSeen;
           const now = Date.now();
-          const isRecentlySeen = lastSeen ? (now - lastSeen < 120000) : true; // 2 minute grace
+          const isRecentlySeen = lastSeen ? (now - lastSeen < 180000) : true; // 3 minute grace
           online = (status.isOnline || false) && isRecentlySeen;
           if (status.verified_pins) pins = status.verified_pins;
         } 
         
         // Fallback: if we see power or voltage changing, it's online
-        if (!online && (p > 0 || v !== 230)) {
+        if (!online && (p > 0 || (v > 100 && v < 300))) {
           online = true;
         }
 
         return {
           power: Math.round(finalP),
           voltage: v,
-          current: i || (finalP / v),
+          current: i || (finalP / (v || 230)),
           online,
           pins,
           ecoMode: settings?.ecoMode || false,
           detectedMac: settings?.macAddress || null,
           appliances: appliances || null,
-          raw: data // Keep raw for debugging
+          raw: data
         };
       };
 
       // Track data from both paths
       let primaryData: any = null;
       let rootData: any = null;
+      let powerData: any = null;
 
       const updateMergedState = () => {
         // CRITICAL: Prioritize the data source that is actually ONLINE or has POWER
         // This solves the issue where the 'empty' user folder was blocking the 'active' root folder
         const isPrimaryActive = primaryData?.online || (primaryData?.power && primaryData.power > 0);
         const isRootActive = rootData?.online || (rootData?.power && rootData.power > 0);
+        const isPowerActive = powerData?.power && powerData.power > 0;
 
-        console.log(`[SmartGrid] Data Sync - Primary: ${isPrimaryActive ? 'ACTIVE' : 'IDLE'}, Root: ${isRootActive ? 'ACTIVE' : 'IDLE'}`);
+        console.log(`[SmartGrid] Data Sync - Primary: ${isPrimaryActive ? 'ACTIVE' : 'IDLE'}, Root: ${isRootActive ? 'ACTIVE' : 'IDLE'}, PowerNode: ${isPowerActive ? 'ACTIVE' : 'IDLE'}`);
 
-        const merged = isPrimaryActive 
+        let merged = isPrimaryActive 
           ? primaryData 
           : isRootActive
             ? rootData
             : primaryData || rootData;
+        
+        // If we have power data from the dedicated 'power' node, merge it in
+        if (isPowerActive && powerData) {
+          if (!merged) merged = { ...powerData, online: true };
+          else {
+            merged = {
+              ...merged,
+              power: powerData.power || merged.power,
+              voltage: powerData.voltage || merged.voltage,
+              current: powerData.current || merged.current,
+              online: true
+            };
+          }
+        }
 
         if (merged) {
           setLivePower(merged.power);
@@ -222,9 +254,15 @@ export const useLoadShedding = () => {
         });
       }
 
+      const unsubPower = onValue(powerRootRef, (snapshot) => {
+        powerData = handleData(snapshot);
+        updateMergedState();
+      });
+
       return () => {
         unsubPrimary();
         unsubRoot();
+        unsubPower();
       };
     };
 
