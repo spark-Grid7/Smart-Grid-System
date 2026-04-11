@@ -91,11 +91,15 @@ export const useLoadShedding = () => {
         let v = 230;
         let i = 0;
 
-        // If hardware is connected (mac is present), we ONLY look at the structured data
-        // If in simulation (mac is null), we allow the flexible/root typing
+        // Support both direct and nested 'info' structure
+        const sensors = data.sensors || data.info?.sensors;
+        const status = data.status || data.info?.status;
+        const settings = data.settings || data.info?.settings;
+        const appliances = data.appliances || data.info?.appliances;
+
         if (mac) {
-          if (data.sensors?.realtime) {
-            const rt = data.sensors.realtime;
+          if (sensors?.realtime) {
+            const rt = sensors.realtime;
             p = typeof rt === 'number' ? rt : (rt.power || 0);
             v = rt.voltage || 230;
             i = rt.current || 0;
@@ -104,8 +108,8 @@ export const useLoadShedding = () => {
           // Simulation Mode: Be flexible
           if (typeof data === 'number') {
             p = data;
-          } else if (data.sensors?.realtime) {
-            const rt = data.sensors.realtime;
+          } else if (sensors?.realtime) {
+            const rt = sensors.realtime;
             p = typeof rt === 'number' ? rt : (rt.power || 0);
             v = rt.voltage || 230;
             i = rt.current || 0;
@@ -123,32 +127,36 @@ export const useLoadShedding = () => {
         setCurrent(i || (finalP / v));
 
         // 2. Handle Status & Online State
-        if (data.status) {
-          const lastSeen = data.status.lastSeen || 0;
+        if (status) {
+          const lastSeen = status.lastSeen || 0;
           const now = Date.now();
-          // Consider offline if no heartbeat for 15 seconds
-          const isRecentlySeen = (now - lastSeen) < 15000;
+          // Consider offline if no heartbeat for 30 seconds (more lenient)
+          const isRecentlySeen = (now - lastSeen) < 30000;
           
-          setIsOnline((data.status.isOnline || false) && isRecentlySeen);
+          setIsOnline((status.isOnline || false) && isRecentlySeen);
           
-          if (data.status.verified_pins) {
-            setActivePins(data.status.verified_pins);
+          if (status.verified_pins) {
+            setActivePins(status.verified_pins);
           }
         } else {
-          // Simulation only: assume online if power is typed
-          if (!mac && p > 0) setIsOnline(true);
+          // Fallback: If we are getting sensor data, assume online
+          if (p > 0 || v !== 230) {
+            setIsOnline(true);
+          } else {
+            setIsOnline(false);
+          }
         }
 
         // 3. Handle Settings
-        if (data.settings) {
-          setEcoMode(data.settings.ecoMode || false);
-          setDetectedMac(data.settings.macAddress || null);
+        if (settings) {
+          setEcoMode(settings.ecoMode || false);
+          setDetectedMac(settings.macAddress || null);
         }
 
         // 4. Handle Real-time Appliance Status
-        if (data.appliances) {
+        if (appliances) {
           const statusMap: Record<string, boolean> = {};
-          Object.entries(data.appliances).forEach(([id, app]: [string, any]) => {
+          Object.entries(appliances).forEach(([id, app]: [string, any]) => {
             if (app) {
               // Priority 1: status (boolean feedback from ESP32)
               // Priority 2: command (string "ON"/"OFF" from Dashboard)
