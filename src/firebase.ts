@@ -1,13 +1,18 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const rtdb = getDatabase(app);
+
+// Use initializeFirestore with experimentalForceLongPolling to fix connection issues in some environments
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
+
+export const rtdb = getDatabase(app, firebaseConfig.databaseURL);
 
 export enum OperationType {
   CREATE = 'create',

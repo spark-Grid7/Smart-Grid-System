@@ -150,7 +150,19 @@ export const useLoadShedding = () => {
       let rootData: any = null;
 
       const updateMergedState = () => {
-        const merged = primaryData || rootData;
+        // CRITICAL: Prioritize the data source that is actually ONLINE or has POWER
+        // This solves the issue where the 'empty' user folder was blocking the 'active' root folder
+        const isPrimaryActive = primaryData?.online || (primaryData?.power && primaryData.power > 0);
+        const isRootActive = rootData?.online || (rootData?.power && rootData.power > 0);
+
+        console.log(`[SmartGrid] Data Sync - Primary: ${isPrimaryActive ? 'ACTIVE' : 'IDLE'}, Root: ${isRootActive ? 'ACTIVE' : 'IDLE'}`);
+
+        const merged = isPrimaryActive 
+          ? primaryData 
+          : isRootActive
+            ? rootData
+            : primaryData || rootData;
+
         if (merged) {
           setLivePower(merged.power);
           setVoltage(merged.voltage);
