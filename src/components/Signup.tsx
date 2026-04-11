@@ -36,7 +36,16 @@ export const Signup = () => {
       }
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Failed to sign up with Google');
+      console.error('Google Signup Error:', err);
+      if (err.code === 'auth/popup-blocked') {
+        setError('The signup popup was blocked by your browser. Please allow popups for this site and try again.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorized for Firebase Authentication. Please check your Firebase Console settings.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('The signup window was closed before completing the sign-in. Please try again.');
+      } else {
+        setError(err.message || 'Failed to sign up with Google. Please ensure you have accepted the Firebase terms in the setup UI.');
+      }
     } finally {
       setLoading(false);
     }

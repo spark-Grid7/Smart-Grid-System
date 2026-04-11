@@ -33,7 +33,16 @@ export const Login = () => {
       }
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Failed to login with Google');
+      console.error('Google Login Error:', err);
+      if (err.code === 'auth/popup-blocked') {
+        setError('The login popup was blocked by your browser. Please allow popups for this site and try again.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorized for Firebase Authentication. Please check your Firebase Console settings.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('The login window was closed before completing the sign-in. Please try again.');
+      } else {
+        setError(err.message || 'Failed to login with Google. Please ensure you have accepted the Firebase terms in the setup UI.');
+      }
     } finally {
       setLoading(false);
     }
