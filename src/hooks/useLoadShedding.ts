@@ -24,9 +24,12 @@ export const useLoadShedding = () => {
   const [ecoMode, setEcoMode] = useState(false);
   const [hardwareId, setHardwareId] = useState<string | null>(null);
   const [livePower, setLivePower] = useState(0);
+  const [voltage, setVoltage] = useState(230);
+  const [current, setCurrent] = useState(0);
   const [lastShedTime, setLastShedTime] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [activePins, setActivePins] = useState<Record<string, boolean>>({});
+  const [rtdbApplianceStatus, setRtdbApplianceStatus] = useState<Record<string, boolean>>({});
   const [detectedMac, setDetectedMac] = useState<string | null>(null);
   const GRID_CAPACITY = 4000;
   const rawLoadPercentage = (livePower / GRID_CAPACITY) * 100;
@@ -56,74 +59,97 @@ export const useLoadShedding = () => {
     let unsubscribePower = () => {};
     
     const setupPowerListener = (mac: string | null) => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return () => {};
+
+      // Reset state when switching modes to prevent data leakage
+      setLivePower(0);
+      setVoltage(230);
+      setCurrent(0);
+      setIsOnline(false);
+      setActivePins({});
+
       const basePath = mac 
-        ? `users/${auth.currentUser.uid}/hardware/${mac}`
-        : `users/${auth.currentUser.uid}/hardware`;
-      
-      const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
-      const statusRef = ref(rtdb, `${basePath}/status`);
-      const settingsRef = ref(rtdb, `${basePath}/settings`);
+        ? `users/${uid}/hardware/${mac}`
+        : `users/${uid}/hardware`;
       
       console.log(`[SmartGrid] Monitoring Path: ${basePath}`);
       
-      const unsubSensors = onValue(sensorsRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          // If data is a number, it might be the power directly (old structure)
-          // If it's an object, it's the new structure
-          if (typeof data === 'number') {
-            const p = data > 20 ? data : data * 1000;
-            setLivePower(Math.round(p));
-          } else {
-            const p = (data.power || 0);
-            const finalP = p > 20 ? p : p * 1000;
-            setLivePower(Math.round(finalP));
-            setVoltage(data.voltage || 230);
-            setCurrent(data.current || (finalP / 230));
+      const hardwareRef = ref(rtdb, basePath);
+      
+      return onValue(hardwareRef, (snapshot) => {
+        if (!snapshot.exists()) {
+          setIsOnline(false);
+          setLivePower(0);
+          return;
+        }
+
+        const data = snapshot.val();
+        
+        // 1. Handle Power/Voltage/Current
+        let p = 0;
+        let v = 230;
+        let i = 0;
+
+        // If hardware is connected (mac is present), we ONLY look at the structured data
+        // If in simulation (mac is null), we allow the flexible/root typing
+        if (mac) {
+          if (data.sensors?.realtime) {
+            const rt = data.sensors.realtime;
+            p = typeof rt === 'number' ? rt : (rt.power || 0);
+            v = rt.voltage || 230;
+            i = rt.current || 0;
           }
         } else {
-          // Fallback for very old structure or manual root typing
-          onValue(ref(rtdb, `${basePath}/power`), (snap) => {
-            if (snap.exists()) {
-              const val = snap.val();
-              const p = val > 20 ? val : val * 1000;
-              setLivePower(Math.round(p));
+          // Simulation Mode: Be flexible
+          if (typeof data === 'number') {
+            p = data;
+          } else if (data.sensors?.realtime) {
+            const rt = data.sensors.realtime;
+            p = typeof rt === 'number' ? rt : (rt.power || 0);
+            v = rt.voltage || 230;
+            i = rt.current || 0;
+          } else if (data.power !== undefined) {
+            p = data.power;
+            v = data.voltage || 230;
+            i = data.current || 0;
+          }
+        }
+
+        // Scaling logic: if < 20, assume kW and convert to W
+        const finalP = p > 20 ? p : p * 1000;
+        setLivePower(Math.round(finalP));
+        setVoltage(v);
+        setCurrent(i || (finalP / v));
+
+        // 2. Handle Status & Online State
+        if (data.status) {
+          setIsOnline(data.status.isOnline || false);
+          if (data.status.verified_pins) {
+            setActivePins(data.status.verified_pins);
+          }
+        } else {
+          // Simulation only: assume online if power is typed
+          if (!mac && p > 0) setIsOnline(true);
+        }
+
+        // 3. Handle Settings
+        if (data.settings) {
+          setEcoMode(data.settings.ecoMode || false);
+          setDetectedMac(data.settings.macAddress || null);
+        }
+
+        // 4. Handle Real-time Appliance Status
+        if (data.appliances) {
+          const statusMap: Record<string, boolean> = {};
+          Object.entries(data.appliances).forEach(([id, app]: [string, any]) => {
+            if (app && typeof app.status === 'boolean') {
+              statusMap[id] = app.status;
             }
-          }, { onlyOnce: true });
+          });
+          setRtdbApplianceStatus(statusMap);
         }
       });
-
-      const unsubStatus = onValue(statusRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          setIsOnline(data.isOnline || false);
-        } else {
-          setIsOnline(false);
-        }
-      });
-
-      const unsubSettings = onValue(settingsRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          setEcoMode(data.ecoMode || false);
-          setDetectedMac(data.macAddress || null);
-        }
-      });
-
-      const unsubAppliances = onValue(ref(rtdb, `${basePath}/status/verified_pins`), (snapshot) => {
-        if (snapshot.exists()) {
-          setActivePins(snapshot.val());
-        } else {
-          setActivePins({});
-        }
-      });
-
-      return () => {
-        unsubSensors();
-        unsubStatus();
-        unsubSettings();
-        unsubAppliances();
-      };
     };
 
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
@@ -143,10 +169,6 @@ export const useLoadShedding = () => {
       unsubscribePower();
     };
   }, []);
-
-  // Add these state variables to the hook
-  const [voltage, setVoltage] = useState(0);
-  const [current, setCurrent] = useState(0);
 
   useEffect(() => {
     if (!ecoMode || devices.length === 0) return;
@@ -210,5 +232,11 @@ export const useLoadShedding = () => {
     (livePower > 3000 && devices.some(d => d.priority >= 3 && !d.status))
   );
 
-  return { livePower, voltage, current, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac };
+  // Merge Firestore devices with RTDB real-time status
+  const mergedDevices = devices.map(d => ({
+    ...d,
+    status: rtdbApplianceStatus[d.id] !== undefined ? rtdbApplianceStatus[d.id] : d.status
+  }));
+
+  return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac };
 };

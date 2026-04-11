@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   RefreshCw
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { ref, onValue, set } from 'firebase/database';
 import { db, auth, rtdb } from '../firebase';
@@ -30,6 +30,8 @@ export const Hardware = () => {
   const [isLinking, setIsLinking] = useState(false);
   const [isPhysicallyLinked, setIsPhysicallyLinked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
+  const [linkStatus, setLinkStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   useEffect(() => {
     if (!auth.currentUser || !linkedId) {
@@ -52,6 +54,7 @@ export const Hardware = () => {
   const handleLinkHardware = async () => {
     if (!auth.currentUser || !hardwareId.trim()) return;
     setIsLinking(true);
+    setLinkStatus('idle');
     try {
       const uid = auth.currentUser.uid;
       const mac = hardwareId.trim().toUpperCase();
@@ -66,8 +69,11 @@ export const Hardware = () => {
       await set(ref(rtdb, `${basePath}/status/isLinked`), false); // Reset until ESP32 confirms
       
       setHardwareId('');
+      setLinkStatus('success');
+      setTimeout(() => setLinkStatus('idle'), 3000);
     } catch (error) {
       console.error("Linking failed", error);
+      setLinkStatus('error');
     } finally {
       setIsLinking(false);
     }
@@ -75,7 +81,6 @@ export const Hardware = () => {
 
   const handleUnlink = async () => {
     if (!auth.currentUser) return;
-    if (!window.confirm("Are you sure you want to unlink this device? Your dashboard will stop showing real-time data from your home.")) return;
     
     setIsLinking(true);
     try {
@@ -86,6 +91,7 @@ export const Hardware = () => {
       const basePath = `users/${uid}/hardware/${linkedId}`;
       await set(ref(rtdb, `${basePath}/settings/macAddress`), null);
       await set(ref(rtdb, `${basePath}/status/isLinked`), false);
+      setShowUnlinkConfirm(false);
     } catch (error) {
       console.error("Unlinking failed", error);
     } finally {
@@ -156,10 +162,18 @@ export const Hardware = () => {
                 <button 
                   onClick={handleLinkHardware}
                   disabled={isLinking || !hardwareId}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-emerald-200 transition-all flex items-center justify-center gap-2"
+                  className={cn(
+                    "w-full py-4 rounded-2xl font-bold text-lg shadow-xl transition-all flex items-center justify-center gap-2",
+                    linkStatus === 'success' ? "bg-emerald-600 text-white" : 
+                    linkStatus === 'error' ? "bg-rose-500 text-white" :
+                    "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-200"
+                  )}
                 >
-                  {isLinking ? 'Linking...' : 'Link Device'}
-                  <LinkIcon size={20} />
+                  {isLinking ? 'Linking...' : 
+                   linkStatus === 'success' ? 'Linked Successfully!' :
+                   linkStatus === 'error' ? 'Failed to Link' :
+                   'Link Device'}
+                  {linkStatus === 'success' ? <CheckCircle2 size={20} /> : <LinkIcon size={20} />}
                 </button>
               </div>
             </div>
@@ -226,7 +240,7 @@ export const Hardware = () => {
                 {isOnline ? 'ONLINE' : 'OFFLINE'}
               </div>
               <button 
-                onClick={handleUnlink}
+                onClick={() => setShowUnlinkConfirm(true)}
                 disabled={isLinking}
                 className="px-8 py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl hover:bg-rose-100 transition-all flex items-center justify-center gap-2"
               >
@@ -235,6 +249,41 @@ export const Hardware = () => {
               </button>
             </div>
           </div>
+
+          <AnimatePresence>
+            {showUnlinkConfirm && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-6 p-6 bg-rose-50 border border-rose-100 rounded-3xl"
+              >
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="text-rose-500" size={24} />
+                    <div>
+                      <h4 className="font-bold text-rose-900">Are you sure?</h4>
+                      <p className="text-sm text-rose-700">Unlinking will stop real-time monitoring from this device.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 w-full md:w-auto">
+                    <button 
+                      onClick={() => setShowUnlinkConfirm(false)}
+                      className="flex-1 md:flex-none px-6 py-2 bg-white border border-rose-200 text-rose-700 font-bold rounded-xl hover:bg-rose-100 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleUnlink}
+                      className="flex-1 md:flex-none px-6 py-2 bg-rose-500 text-white font-bold rounded-xl hover:bg-rose-600 transition-all"
+                    >
+                      Confirm Unlink
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">

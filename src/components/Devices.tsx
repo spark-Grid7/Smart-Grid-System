@@ -9,7 +9,8 @@ import {
   MoreVertical,
   CheckCircle2,
   Unlink,
-  AlertCircle
+  AlertCircle,
+  Activity
 } from 'lucide-react';
 import { 
   collection, 
@@ -195,15 +196,15 @@ export const Devices = () => {
                         {hardwareId ? (
                           <div className={cn(
                             "flex items-center gap-1.5 font-bold text-sm",
-                            (isOnline && activePins[device.relayPin]) ? "text-emerald-600" : "text-rose-500"
+                            isOnline ? (activePins[device.relayPin] ? "text-emerald-500" : "text-amber-500") : "text-rose-500"
                           )}>
-                            {(isOnline && activePins[device.relayPin]) ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                            {(isOnline && activePins[device.relayPin]) ? 'Linked & Online' : 'Linked & Offline'}
+                            {isOnline ? (activePins[device.relayPin] ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />) : <Unlink size={16} />}
+                            {isOnline ? (activePins[device.relayPin] ? 'Linked & Online' : 'Pin Not Verified') : 'Hardware Offline'}
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5 text-slate-400 font-bold text-sm">
-                            <Unlink size={16} />
-                            Not Linked
+                            <Activity size={16} />
+                            Simulated Mode
                           </div>
                         )}
                       </div>

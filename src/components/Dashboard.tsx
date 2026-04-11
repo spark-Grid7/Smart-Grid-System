@@ -205,15 +205,25 @@ export const Dashboard = () => {
           className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"
         >
           <div className="flex items-center justify-between mb-4">
-            <div className="p-3 rounded-2xl bg-blue-50 text-blue-600">
-              <TrendingUp size={24} />
+            <div className={cn(
+              "p-3 rounded-2xl",
+              hardwareId && !isOnline ? "bg-slate-50 text-slate-400" : "bg-blue-50 text-blue-600"
+            )}>
+              <TrendingUp size={24} className={cn(isOnline && "animate-pulse")} />
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V: {voltage.toFixed(1)}V | I: {current.toFixed(2)}A</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                {hardwareId && !isOnline ? '---' : `V: ${voltage.toFixed(1)}V | I: ${current.toFixed(2)}A`}
+              </p>
             </div>
           </div>
           <h3 className="text-slate-500 text-xs font-medium">Live Power</h3>
-          <p className="text-lg font-bold text-slate-900 mt-1">{livePower} W</p>
+          <p className={cn(
+            "text-lg font-bold mt-1",
+            hardwareId && !isOnline ? "text-slate-300" : "text-slate-900"
+          )}>
+            {hardwareId && !isOnline ? 'OFFLINE' : `${livePower} W`}
+          </p>
         </motion.div>
 
         {/* Savings */}
@@ -293,9 +303,9 @@ export const Dashboard = () => {
           <p className="text-lg font-bold text-slate-900 mt-1 truncate">
             {hardwareId ? hardwareId : 'Simulated'}
           </p>
-          {auth.currentUser && hardwareId && (
+          {auth.currentUser && (
             <p className="text-[10px] text-slate-400 mt-1 font-mono break-all">
-              RTDB: /users/{auth.currentUser.uid}/hardware/{hardwareId}
+              RTDB: /users/{auth.currentUser.uid}/hardware{hardwareId ? `/${hardwareId}` : ''}
             </p>
           )}
         </motion.div>
@@ -381,10 +391,9 @@ export const Dashboard = () => {
                 <div className="flex flex-col items-end gap-2">
                   <button
                     onClick={() => toggleDevice(device.id, device.status, device.relayPin, device.name)}
-                    disabled={hardwareId ? !isOnline : false}
                     className={cn(
                       "group flex items-center gap-2 focus:outline-none transition-opacity",
-                      hardwareId && !isOnline && "opacity-50 cursor-not-allowed"
+                      hardwareId && !isOnline && "opacity-80"
                     )}
                   >
                     <span className={cn(
