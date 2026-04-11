@@ -27,7 +27,7 @@ function cn(...inputs: ClassValue[]) {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Hardware = () => {
-  const { isOnline, hardwareId: linkedId, detectedMac, dbConnected, rawRtdbData } = useLoadShedding();
+  const { isOnline, hardwareId: linkedId, detectedMac, dbConnected, rawRtdbData, dataSource, voltage, current, livePower } = useLoadShedding();
   const [hardwareId, setHardwareId] = useState('');
   const [showRawData, setShowRawData] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
@@ -338,60 +338,80 @@ export const Hardware = () => {
               <p className="text-sm font-bold text-slate-700">{isOnline ? 'Receiving Live Packets' : 'No Data Received'}</p>
             </div>
           </div>
+          <div className="p-4 bg-white rounded-2xl border border-slate-100 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+              <Activity size={20} />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-bold uppercase">Active Path</p>
+              <p className="text-sm font-bold text-slate-700 truncate max-w-[150px]">{dataSource}</p>
+            </div>
+          </div>
         </div>
 
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Troubleshooting</h3>
-        
-        <div className="mb-6">
-          <button 
-            onClick={() => setShowRawData(!showRawData)}
-            className="flex items-center gap-2 text-blue-600 font-bold text-sm hover:underline mb-4"
-          >
-            <Activity size={16} />
-            {showRawData ? 'Hide Live Data Inspector' : 'Show Live Data Inspector'}
-          </button>
+        <h3 className="text-lg font-bold text-slate-800 mb-4">Live Data Inspector</h3>
+        <div className="bg-slate-900 rounded-2xl p-6 overflow-hidden border border-slate-800 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-slate-600'}`} />
+              <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Real-time Stream</span>
+            </div>
+            <button 
+              onClick={() => setShowRawData(!showRawData)}
+              className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
+            >
+              {showRawData ? 'Hide Raw JSON' : 'View Raw JSON'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Voltage</p>
+              <p className="text-2xl font-mono text-blue-400">{voltage.toFixed(2)}<span className="text-sm ml-1 text-slate-500">V</span></p>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Current</p>
+              <p className="text-2xl font-mono text-emerald-400">{current.toFixed(3)}<span className="text-sm ml-1 text-slate-500">A</span></p>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Power</p>
+              <p className="text-2xl font-mono text-orange-400">{livePower}<span className="text-sm ml-1 text-slate-500">W</span></p>
+            </div>
+          </div>
+
+          {showRawData && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">Database Payload</span>
+                <span className="text-[10px] text-slate-600 font-mono">{dataSource}</span>
+              </div>
+              <pre className="text-[11px] font-mono text-slate-300 bg-black/30 p-4 rounded-xl overflow-auto max-h-[300px] border border-slate-800/50 custom-scrollbar">
+                {rawRtdbData ? JSON.stringify(rawRtdbData, null, 2) : '// No data received yet...'}
+              </pre>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8">
+          <h3 className="text-lg font-bold text-slate-800 mb-4">Troubleshooting</h3>
           
-          <AnimatePresence>
-            {showRawData && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="bg-slate-900 rounded-2xl p-6 overflow-hidden border border-slate-800"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Incoming JSON Stream</h4>
-                  <div className="flex items-center gap-2">
-                    <div className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-500 animate-pulse" : "bg-slate-600")} />
-                    <span className="text-[10px] text-slate-500 font-mono">{isOnline ? 'STREAMING' : 'IDLE'}</span>
-                  </div>
-                </div>
-                <pre className="text-emerald-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-64">
-                  {rawRtdbData ? JSON.stringify(rawRtdbData, null, 2) : '// No data received yet. Ensure your ESP32 is writing to the correct path.'}
-                </pre>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className="space-y-6">
+            <ul className="space-y-3 text-slate-600 text-sm">
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                <b>Firebase Rules:</b> Ensure your Realtime Database rules allow read/write access.
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
+                If data isn't appearing, ensure your ESP32 is connected to WiFi.
+              </li>
+              <li className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
+                Check that the Device ID matches exactly (case-insensitive).
+              </li>
+            </ul>
+          </div>
         </div>
-
-        <ul className="space-y-3 text-slate-600 text-sm">
-          <li className="flex items-start gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-            <b>Firebase Rules:</b> Ensure your Realtime Database rules allow read/write access. For testing, set <code>".read": true, ".write": true</code>.
-          </li>
-          <li className="flex items-start gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
-            If data isn't appearing, ensure your ESP32 is connected to WiFi.
-          </li>
-          <li className="flex items-start gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
-            Check that the Device ID matches exactly (case-insensitive).
-          </li>
-          <li className="flex items-start gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
-            Verify your Firebase API Key and Database URL in the Arduino code.
-          </li>
-        </ul>
       </div>
 
       <motion.div 

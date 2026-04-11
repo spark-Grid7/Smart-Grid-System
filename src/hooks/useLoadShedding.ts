@@ -33,6 +33,7 @@ export const useLoadShedding = () => {
   const [detectedMac, setDetectedMac] = useState<string | null>(null);
   const [dbConnected, setDbConnected] = useState(false);
   const [rawRtdbData, setRawRtdbData] = useState<any>(null);
+  const [dataSource, setDataSource] = useState<string>('None');
   const GRID_CAPACITY = 4000;
 
   useEffect(() => {
@@ -89,8 +90,7 @@ export const useLoadShedding = () => {
       console.log(`[SmartGrid] Monitoring Path: ${basePath}`);
       
       const hardwareRef = ref(rtdb, basePath);
-      const rootRef = mac ? ref(rtdb, mac) : null;
-      const powerRootRef = ref(rtdb, 'power'); // Listen to root 'power' node if it exists
+      const rootRef = mac ? ref(rtdb, `hardware/${mac}`) : null;
       
       const handleData = (snapshot: any) => {
         if (!snapshot.exists()) return null;
@@ -100,13 +100,9 @@ export const useLoadShedding = () => {
         
         // DEEP SEARCH: Find power, voltage, current anywhere in the object
         const findValue = (obj: any, keys: string[]): any => {
-          if (obj === null || obj === undefined) return undefined;
-          
-          if (typeof obj === 'number') return obj;
-          if (typeof obj === 'string' && !isNaN(parseFloat(obj))) return parseFloat(obj);
+          if (!obj || typeof obj !== 'object') return undefined;
 
-          if (typeof obj !== 'object') return undefined;
-
+          // 1. Check direct keys first (highest priority)
           for (const key of keys) {
             if (obj[key] !== undefined) {
               const val = obj[key];
@@ -115,9 +111,13 @@ export const useLoadShedding = () => {
             }
           }
 
+          // 2. Recurse into children ONLY if they are objects
+          // This prevents picking up random numbers from arrays or primitive values (like pin 26)
           for (const key in obj) {
-            const val = findValue(obj[key], keys);
-            if (val !== undefined) return val;
+            if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+              const val = findValue(obj[key], keys);
+              if (val !== undefined) return val;
+            }
           }
           return undefined;
         };
@@ -125,19 +125,28 @@ export const useLoadShedding = () => {
         // Explicitly look for the structure in the screenshot: info/sensors/realtime
         const rt = data.info?.sensors?.realtime || data.sensors?.realtime || data.realtime;
         
-        let p = findValue(rt || data, ['power', 'p', 'watts', 'P', 'realtime_power', 'load']) ?? 0;
-        let v = findValue(rt || data, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
-        let i = findValue(rt || data, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
+        const p = findValue(rt || data, ['power', 'p', 'watts', 'P', 'realtime_power', 'load']) ?? 0;
+        const v = findValue(rt || data, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
+        const i = findValue(rt || data, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
 
-        // Scaling logic: if < 20, assume kW and convert to W
-        let finalP = p > 20 ? p : p * 1000;
+        console.log(`[SmartGrid] Raw Found - P: ${p}, V: ${v}, I: ${i}`);
+
+        // Scaling logic: Only scale if voltage is high (AC) and power is tiny (kW)
+        // For DC systems (like 5V), we use the values exactly as they are.
+        let finalP = p;
+        if (v > 100 && p > 0 && p < 20) {
+          finalP = p * 1000; // Assume kW -> W for AC
+        }
         
-        // POWER CALCULATION FALLBACK:
-        // If power is suspiciously low (e.g., < 5W) but current is high (> 0.1A), 
-        // calculate power from V * I
-        if (finalP < 5 && i > 0.1) {
-          console.log(`[SmartGrid] Power suspiciously low (${finalP}W). Calculating from I (${i}A) * V (${v}V)`);
-          finalP = i * v;
+        // POWER CALCULATION LOGIC:
+        // If reported power is 0 or suspiciously inconsistent with V*I, recalculate
+        if (i > 0.01) {
+          const calculatedP = i * v;
+          // If reported power is near zero but we have current, use calculated
+          if (finalP < 0.1 && calculatedP > 0.1) {
+            console.log(`[SmartGrid] Using Calculated Power: ${Math.round(calculatedP)}W (based on ${i}A * ${v}V)`);
+            finalP = calculatedP;
+          }
         }
 
         // 2. Handle Status & Online State
@@ -176,43 +185,28 @@ export const useLoadShedding = () => {
       // Track data from both paths
       let primaryData: any = null;
       let rootData: any = null;
-      let powerData: any = null;
 
       const updateMergedState = () => {
         // CRITICAL: Prioritize the data source that is actually ONLINE or has POWER
         // This solves the issue where the 'empty' user folder was blocking the 'active' root folder
         const isPrimaryActive = !!primaryData && (primaryData.online || primaryData.power > 0 || primaryData.current > 0);
         const isRootActive = !!rootData && (rootData.online || rootData.power > 0 || rootData.current > 0);
-        const isPowerActive = !!powerData && (powerData.power > 0 || powerData.current > 0);
 
-        console.log(`[SmartGrid] Data Sync - Primary: ${isPrimaryActive ? 'ACTIVE' : 'IDLE'}, Root: ${isRootActive ? 'ACTIVE' : 'IDLE'}, PowerNode: ${isPowerActive ? 'ACTIVE' : 'IDLE'}`);
+        console.log(`[SmartGrid] Data Sync - Primary: ${isPrimaryActive ? 'ACTIVE' : 'IDLE'}, Root: ${isRootActive ? 'ACTIVE' : 'IDLE'}`);
 
-        let merged = isPrimaryActive 
-          ? primaryData 
+        const merged = isPrimaryActive 
+          ? { ...primaryData, source: 'User Hardware Path' } 
           : isRootActive
-            ? rootData
-            : primaryData || rootData;
-        
-        // If we have power data from the dedicated 'power' node, merge it in
-        if (isPowerActive && powerData) {
-          if (!merged) merged = { ...powerData, online: true };
-          else {
-            merged = {
-              ...merged,
-              power: powerData.power || merged.power,
-              voltage: powerData.voltage || merged.voltage,
-              current: powerData.current || merged.current,
-              online: true
-            };
-          }
-        }
+            ? { ...rootData, source: 'Root MAC Path' }
+            : primaryData ? { ...primaryData, source: 'User Hardware Path (Idle)' } : rootData ? { ...rootData, source: 'Root MAC Path (Idle)' } : null;
 
         if (merged) {
           setLivePower(merged.power);
           setVoltage(merged.voltage);
           setCurrent(merged.current);
           setIsOnline(merged.online);
-          setActivePins(merged.pins);
+          setActivePins(merged.pins || {});
+          setDataSource(merged.source || 'Unknown');
           if (merged.ecoMode !== undefined) setEcoMode(merged.ecoMode);
           if (merged.detectedMac !== undefined) setDetectedMac(merged.detectedMac);
           
@@ -252,15 +246,9 @@ export const useLoadShedding = () => {
         });
       }
 
-      const unsubPower = onValue(powerRootRef, (snapshot) => {
-        powerData = handleData(snapshot);
-        updateMergedState();
-      });
-
       return () => {
         unsubPrimary();
         unsubRoot();
-        unsubPower();
       };
     };
 
@@ -350,5 +338,5 @@ export const useLoadShedding = () => {
     status: rtdbApplianceStatus[d.id] !== undefined ? rtdbApplianceStatus[d.id] : d.status
   }));
 
-  return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac, dbConnected, rawRtdbData };
+  return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac, dbConnected, rawRtdbData, dataSource };
 };
