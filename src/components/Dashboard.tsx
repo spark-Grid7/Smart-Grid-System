@@ -52,7 +52,8 @@ export const Dashboard = () => {
 
     // Self-healing: Ensure the branch exists on load
     const initializeIfMissing = async () => {
-      const basePath = `users/${auth.currentUser.uid}/hardware`;
+      if (!hardwareId) return;
+      const basePath = `users/${auth.currentUser.uid}/hardware/${hardwareId}`;
       const statusRef = ref(rtdb, `${basePath}/status`);
       const snapshot = await get(statusRef);
       if (!snapshot.exists()) {
@@ -68,7 +69,7 @@ export const Dashboard = () => {
           },
           settings: {
             ecoMode: false,
-            macAddress: ""
+            macAddress: hardwareId
           },
           appliances: {},
           schedules: {}
@@ -81,7 +82,7 @@ export const Dashboard = () => {
   }, []);
 
   const toggleEcoMode = async () => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !hardwareId) return;
     try {
       const uid = auth.currentUser.uid;
       const userDocRef = doc(db, 'users', uid);
@@ -89,7 +90,7 @@ export const Dashboard = () => {
       await updateDoc(userDocRef, { ecoMode: newEco });
       
       // Sync to RTDB for ESP32
-      const basePath = `users/${uid}/hardware/settings/ecoMode`;
+      const basePath = `users/${uid}/hardware/${hardwareId}/settings/ecoMode`;
       await set(ref(rtdb, basePath), newEco);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
@@ -97,7 +98,7 @@ export const Dashboard = () => {
   };
 
     const toggleDevice = async (deviceId: string, currentStatus: boolean, relayPin: number, name: string) => {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser || !hardwareId) return;
       
       try {
         const uid = auth.currentUser.uid;
@@ -108,7 +109,7 @@ export const Dashboard = () => {
         await updateDoc(deviceRef, { status: newStatus });
         
         // Update Realtime Database for ESP32
-        const basePath = `users/${uid}/hardware/appliances/${deviceId}`;
+        const basePath = `users/${uid}/hardware/${hardwareId}/appliances/${deviceId}`;
         await set(ref(rtdb, `${basePath}/command`), newStatus ? "ON" : "OFF");
         // Also update the status field so the ESP32 knows the current target state
         await set(ref(rtdb, `${basePath}/status`), newStatus);
@@ -265,9 +266,9 @@ export const Dashboard = () => {
           <p className="text-lg font-bold text-slate-900 mt-1 truncate">
             {hardwareId ? hardwareId : 'Simulated'}
           </p>
-          {auth.currentUser && (
+          {auth.currentUser && hardwareId && (
             <p className="text-[10px] text-slate-400 mt-1 font-mono break-all">
-              RTDB: /users/{auth.currentUser.uid}/hardware
+              RTDB: /users/{auth.currentUser.uid}/hardware/{hardwareId}
             </p>
           )}
         </motion.div>

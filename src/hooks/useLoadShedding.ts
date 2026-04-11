@@ -27,6 +27,7 @@ export const useLoadShedding = () => {
   const [lastShedTime, setLastShedTime] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [activePins, setActivePins] = useState<Record<string, boolean>>({});
+  const [detectedMac, setDetectedMac] = useState<string | null>(null);
   const GRID_CAPACITY = 4000;
   const rawLoadPercentage = (livePower / GRID_CAPACITY) * 100;
   const loadPercentage = Math.min(100, Math.round(rawLoadPercentage));
@@ -54,31 +55,20 @@ export const useLoadShedding = () => {
     const userDocRef = doc(db, 'users', auth.currentUser.uid);
     let unsubscribePower = () => {};
     
-    const setupPowerListener = () => {
-      const basePath = `users/${auth.currentUser.uid}/hardware`;
+    const setupPowerListener = (mac: string | null) => {
+      const basePath = mac 
+        ? `users/${auth.currentUser.uid}/hardware/${mac}`
+        : `users/${auth.currentUser.uid}/hardware`;
+      
       const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
       const statusRef = ref(rtdb, `${basePath}/status`);
       const settingsRef = ref(rtdb, `${basePath}/settings`);
-      const appliancesRef = ref(rtdb, `${basePath}/appliances`);
       
-      console.log(`[SmartGrid] Monitoring User Hardware Path: ${basePath}`);
-      
-      let lastHeartbeatVal = 0;
-
-      // Watchdog to check if data is stale
-      const watchdog = setInterval(() => {
-        if (lastHeartbeatVal > 0) {
-          const now = Date.now();
-          // The ESP32 sends millis() to lastSeen, which isn't a wall clock time.
-          // We should rely on the heartbeat or a simple online flag.
-          // However, the ESP32 code provided sets isOnline = true in loop.
-        }
-      }, 5000);
+      console.log(`[SmartGrid] Monitoring Path: ${basePath}`);
       
       const unsubSensors = onValue(sensorsRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
-          // The ESP32 code sends power in kW (power / 1000.0)
           const p = (data.power || 0) * 1000; 
           setLivePower(Math.round(p));
           setVoltage(data.voltage || 0);
@@ -90,8 +80,6 @@ export const useLoadShedding = () => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           setIsOnline(data.isOnline || false);
-          // We can't easily use lastSeen (millis) for wall clock comparison
-          // but we can assume if isOnline is true, it's recently updated.
         } else {
           setIsOnline(false);
         }
@@ -101,6 +89,7 @@ export const useLoadShedding = () => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           setEcoMode(data.ecoMode || false);
+          setDetectedMac(data.macAddress || null);
         }
       });
 
@@ -117,17 +106,17 @@ export const useLoadShedding = () => {
         unsubStatus();
         unsubSettings();
         unsubAppliances();
-        clearInterval(watchdog);
       };
     };
-
-    unsubscribePower = setupPowerListener();
 
     const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
         const hId = data.hardwareId || null;
         setHardwareId(hId);
+        
+        unsubscribePower();
+        unsubscribePower = setupPowerListener(hId);
       }
     });
 
@@ -201,5 +190,5 @@ export const useLoadShedding = () => {
     (livePower > 3000 && devices.some(d => d.priority >= 3 && !d.status))
   );
 
-  return { livePower, voltage, current, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId, isOnline, activePins };
+  return { livePower, voltage, current, loadPercentage, ecoMode, devices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac };
 };

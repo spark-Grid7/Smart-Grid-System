@@ -25,16 +25,20 @@ function cn(...inputs: ClassValue[]) {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Hardware = () => {
-  const { isOnline, hardwareId: linkedId } = useLoadShedding();
+  const { isOnline, hardwareId: linkedId, detectedMac } = useLoadShedding();
   const [hardwareId, setHardwareId] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [isPhysicallyLinked, setIsPhysicallyLinked] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !linkedId) {
+      setIsPhysicallyLinked(false);
+      setLoading(false);
+      return;
+    }
 
-    const basePath = `users/${auth.currentUser.uid}/hardware`;
+    const basePath = `users/${auth.currentUser.uid}/hardware/${linkedId}`;
     const linkedRef = ref(rtdb, `${basePath}/status/isLinked`);
     
     const unsub = onValue(linkedRef, (snapshot) => {
@@ -43,7 +47,7 @@ export const Hardware = () => {
     });
 
     return () => unsub();
-  }, []);
+  }, [linkedId]);
 
   const handleLinkHardware = async () => {
     if (!auth.currentUser || !hardwareId.trim()) return;
@@ -57,7 +61,7 @@ export const Hardware = () => {
       await updateDoc(userDocRef, { hardwareId: mac });
       
       // 2. Update RTDB for the ESP32 to verify
-      const basePath = `users/${uid}/hardware`;
+      const basePath = `users/${uid}/hardware/${mac}`;
       await set(ref(rtdb, `${basePath}/settings/macAddress`), mac);
       await set(ref(rtdb, `${basePath}/status/isLinked`), false); // Reset until ESP32 confirms
       
@@ -79,7 +83,7 @@ export const Hardware = () => {
       const userDocRef = doc(db, 'users', uid);
       await updateDoc(userDocRef, { hardwareId: null });
       
-      const basePath = `users/${uid}/hardware`;
+      const basePath = `users/${uid}/hardware/${linkedId}`;
       await set(ref(rtdb, `${basePath}/settings/macAddress`), null);
       await set(ref(rtdb, `${basePath}/status/isLinked`), false);
     } catch (error) {
@@ -142,7 +146,13 @@ export const Hardware = () => {
                 </p>
               </div>
 
-              <div className="flex flex-col justify-end">
+              <div className="flex flex-col justify-end gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Your User UID</label>
+                  <div className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-400 font-mono text-sm break-all">
+                    {auth.currentUser?.uid}
+                  </div>
+                </div>
                 <button 
                   onClick={handleLinkHardware}
                   disabled={isLinking || !hardwareId}
@@ -185,12 +195,23 @@ export const Hardware = () => {
                     ? 'Your ESP32 has confirmed the link and is communicating.' 
                     : 'The dashboard is waiting for your ESP32 to connect and verify its MAC address.'}
                 </p>
-                <div className="mt-2 flex flex-col gap-1">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-lg text-slate-600 font-mono font-bold text-sm w-fit">
-                    ID: {linkedId}
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Your User UID (Paste in Arduino Code)</label>
+                    <div className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 font-mono font-bold text-sm w-fit shadow-sm">
+                      {auth.currentUser?.uid}
+                    </div>
                   </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-lg text-slate-600 font-mono font-bold text-sm w-fit">
+                    Linked ID: {linkedId}
+                  </div>
+                  {detectedMac && detectedMac !== linkedId && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 font-mono font-bold text-sm w-fit">
+                      Detected Hardware: {detectedMac}
+                    </div>
+                  )}
                   <p className="text-[10px] text-slate-400 font-mono mt-1">
-                    Realtime Database Path: <span className="text-emerald-600">/users/{auth.currentUser?.uid}/hardware</span>
+                    Realtime Database Path: <span className="text-emerald-600">/users/{auth.currentUser?.uid}/hardware/{linkedId}</span>
                   </p>
                 </div>
               </div>

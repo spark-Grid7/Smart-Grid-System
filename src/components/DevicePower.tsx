@@ -16,18 +16,33 @@ export const DevicePower = ({ pin }: DevicePowerProps) => {
     if (!auth.currentUser) return;
 
     const uid = auth.currentUser.uid;
-    const basePath = `users/${uid}/hardware/appliances/${pin}`;
-    const powerRef = ref(rtdb, `${basePath}/power`);
-    
-    const unsubscribe = onValue(powerRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setPower(snapshot.val());
-      } else {
-        setPower(0);
+    const userDocRef = doc(db, 'users', uid);
+    let unsubscribeRTDB = () => {};
+
+    const unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const hId = docSnap.data().hardwareId;
+        const basePath = hId 
+          ? `users/${uid}/hardware/${hId}/appliances/${pin}`
+          : `users/${uid}/hardware/appliances/${pin}`;
+        
+        const powerRef = ref(rtdb, `${basePath}/power`);
+        
+        unsubscribeRTDB();
+        unsubscribeRTDB = onValue(powerRef, (snapshot) => {
+          if (snapshot.exists()) {
+            setPower(snapshot.val());
+          } else {
+            setPower(0);
+          }
+        });
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeFirestore();
+      unsubscribeRTDB();
+    };
   }, [pin]);
 
   return (

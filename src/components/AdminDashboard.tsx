@@ -39,47 +39,67 @@ const UserRow: React.FC<{ user: UserData }> = ({ user }) => {
   const [deviceCount, setDeviceCount] = useState(0);
 
   useEffect(() => {
-    // Listen to RTDB for this user's hardware data
-    const basePath = `users/${user.id}/hardware`;
-    const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
-    const statusRef = ref(rtdb, `${basePath}/status`);
-    const appliancesRef = ref(rtdb, `${basePath}/appliances`);
+    // 1. Get the hardwareId from Firestore first
+    const userDocRef = doc(db, 'users', user.id);
+    let unsubscribeRTDB = () => {};
 
-    const unsubscribeSensors = onValue(sensorsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setGridData(prev => ({
-          ...prev,
-          power: Math.round((data.power || 0) * 1000),
-          voltage: data.voltage || 0,
-          current: data.current || 0,
-          status: 'stable'
-        } as UserGridData));
-      }
-    });
+    const unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const hId = docSnap.data().hardwareId;
+        
+        // 2. Listen to RTDB using the hardwareId
+        const basePath = hId 
+          ? `users/${user.id}/hardware/${hId}`
+          : `users/${user.id}/hardware`;
+          
+        const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
+        const statusRef = ref(rtdb, `${basePath}/status`);
+        const appliancesRef = ref(rtdb, `${basePath}/appliances`);
 
-    const unsubscribeStatus = onValue(statusRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        setGridData(prev => ({
-          ...prev,
-          status: data.isOnline ? 'online' : 'offline'
-        } as UserGridData));
-      }
-    });
+        unsubscribeRTDB();
 
-    const unsubscribeAppliances = onValue(appliancesRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setDeviceCount(Object.keys(snapshot.val()).length);
-      } else {
-        setDeviceCount(0);
+        const unsubSensors = onValue(sensorsRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            setGridData(prev => ({
+              ...prev,
+              power: Math.round((data.power || 0) * 1000),
+              voltage: data.voltage || 0,
+              current: data.current || 0,
+              status: 'stable'
+            } as UserGridData));
+          }
+        });
+
+        const unsubStatus = onValue(statusRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            setGridData(prev => ({
+              ...prev,
+              status: data.isOnline ? 'online' : 'offline'
+            } as UserGridData));
+          }
+        });
+
+        const unsubAppliances = onValue(appliancesRef, (snapshot) => {
+          if (snapshot.exists()) {
+            setDeviceCount(Object.keys(snapshot.val()).length);
+          } else {
+            setDeviceCount(0);
+          }
+        });
+
+        unsubscribeRTDB = () => {
+          unsubSensors();
+          unsubStatus();
+          unsubAppliances();
+        };
       }
     });
 
     return () => {
-      unsubscribeSensors();
-      unsubscribeStatus();
-      unsubscribeAppliances();
+      unsubscribeFirestore();
+      unsubscribeRTDB();
     };
   }, [user.id]);
 

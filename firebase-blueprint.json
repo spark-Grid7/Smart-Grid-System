@@ -89,5 +89,58 @@
       "schema": "Schedule",
       "description": "Device automation schedules"
     }
+  },
+  "realtimeDatabase": {
+    "/users/{userId}/hardware/{macAddress}": {
+      "description": "Hardware node for a specific ESP32 device",
+      "properties": {
+        "status": {
+          "description": "Connectivity and heartbeat status",
+          "properties": {
+            "isOnline": { "type": "boolean" },
+            "isLinked": { "type": "boolean" },
+            "lastSeen": { "type": "number" },
+            "verified_pins": { "type": "object" }
+          }
+        },
+        "sensors": {
+          "description": "Real-time sensor readings",
+          "properties": {
+            "realtime": {
+              "properties": {
+                "power": { "type": "number" },
+                "voltage": { "type": "number" },
+                "current": { "type": "number" }
+              }
+            }
+          }
+        },
+        "settings": {
+          "description": "Device-specific settings",
+          "properties": {
+            "ecoMode": { "type": "boolean" },
+            "macAddress": { "type": "string" }
+          }
+        },
+        "appliances": {
+          "description": "Relay control and status for connected devices",
+          "additionalProperties": {
+            "properties": {
+              "name": { "type": "string" },
+              "pin": { "type": "integer" },
+              "priority": { "type": "integer" },
+              "status": { "type": "boolean" },
+              "command": { "type": "string", "enum": ["ON", "OFF", "NONE"] }
+            }
+          }
+        },
+        "schedules": {
+          "description": "Automation schedules synced to hardware",
+          "additionalProperties": {
+            "schema": "Schedule"
+          }
+        }
+      }
+    }
   }
 }

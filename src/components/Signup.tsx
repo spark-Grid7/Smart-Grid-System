@@ -15,23 +15,6 @@ export const Signup = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const initializeUserRTDB = async (uid: string) => {
-    const hardwareRef = ref(rtdb, `users/${uid}/hardware`);
-    await set(hardwareRef, {
-      sensors: {
-        realtime: { power: 0, voltage: 0, current: 0 }
-      },
-      status: {
-        isOnline: false,
-        isLinked: false,
-        lastSeen: 0
-      },
-      settings: {
-        ecoMode: false,
-        macAddress: ""
-      }
-    });
-  };
 
   const handleGoogleSignup = async () => {
     setLoading(true);
@@ -50,8 +33,6 @@ export const Signup = () => {
           ecoMode: false,
           createdAt: serverTimestamp()
         });
-        // Automate RTDB branch creation
-        await initializeUserRTDB(user.uid);
       }
       navigate('/');
     } catch (err: any) {
@@ -79,9 +60,6 @@ export const Signup = () => {
         createdAt: serverTimestamp()
       });
 
-      // Automate RTDB branch creation
-      await initializeUserRTDB(user.uid);
-      
       navigate('/login');
     } catch (err: any) {
       if (err.code === 'auth/operation-not-allowed') {
