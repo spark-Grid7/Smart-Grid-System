@@ -124,7 +124,13 @@ export const useLoadShedding = () => {
 
         // 2. Handle Status & Online State
         if (data.status) {
-          setIsOnline(data.status.isOnline || false);
+          const lastSeen = data.status.lastSeen || 0;
+          const now = Date.now();
+          // Consider offline if no heartbeat for 15 seconds
+          const isRecentlySeen = (now - lastSeen) < 15000;
+          
+          setIsOnline((data.status.isOnline || false) && isRecentlySeen);
+          
           if (data.status.verified_pins) {
             setActivePins(data.status.verified_pins);
           }
