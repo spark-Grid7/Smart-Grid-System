@@ -11,26 +11,13 @@ interface DevicePowerProps {
 
 export const DevicePower = ({ pin }: DevicePowerProps) => {
   const [power, setPower] = useState<number>(0);
-  const [linkedId, setLinkedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    const userDocRef = doc(db, 'users', auth.currentUser.uid);
-    const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
-      if (doc.exists()) {
-        setLinkedId(doc.data().hardwareId || null);
-      }
-    });
-
-    return () => unsubscribeUser();
-  }, []);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    const basePath = linkedId ? `hardware/${linkedId}` : `users/${auth.currentUser.uid}`;
-    const powerRef = ref(rtdb, `${basePath}/devices/${pin}/power`);
+    const uid = auth.currentUser.uid;
+    const basePath = `users/${uid}/hardware/appliances/${pin}`;
+    const powerRef = ref(rtdb, `${basePath}/power`);
     
     const unsubscribe = onValue(powerRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -41,7 +28,7 @@ export const DevicePower = ({ pin }: DevicePowerProps) => {
     });
 
     return () => unsubscribe();
-  }, [pin, linkedId]);
+  }, [pin]);
 
   return (
     <div className="flex items-center gap-1 text-emerald-600 font-bold">

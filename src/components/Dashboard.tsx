@@ -53,22 +53,25 @@ export const Dashboard = () => {
     // Self-healing: Ensure the branch exists on load
     const initializeIfMissing = async () => {
       const basePath = `users/${auth.currentUser.uid}/hardware`;
-      const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
-      const snapshot = await get(sensorsRef);
+      const statusRef = ref(rtdb, `${basePath}/status`);
+      const snapshot = await get(statusRef);
       if (!snapshot.exists()) {
-        await set(sensorsRef, {
-          power: 0,
-          voltage: 0,
-          current: 0
-        });
-        await set(ref(rtdb, `${basePath}/status`), {
-          isOnline: false,
-          isLinked: false,
-          lastSeen: 0
-        });
-        await set(ref(rtdb, `${basePath}/settings`), {
-          ecoMode: false,
-          macAddress: ""
+        await set(ref(rtdb, basePath), {
+          sensors: {
+            realtime: { power: 0, voltage: 0, current: 0 }
+          },
+          status: {
+            isOnline: false,
+            isLinked: false,
+            lastSeen: 0,
+            verified_pins: {}
+          },
+          settings: {
+            ecoMode: false,
+            macAddress: ""
+          },
+          appliances: {},
+          schedules: {}
         });
       }
     };

@@ -39,25 +39,47 @@ const UserRow: React.FC<{ user: UserData }> = ({ user }) => {
   const [deviceCount, setDeviceCount] = useState(0);
 
   useEffect(() => {
-    // Listen to RTDB for this user's grid data
-    const gridRef = ref(rtdb, `users/${user.id}/grid`);
-    const unsubscribeGrid = onValue(gridRef, (snapshot) => {
+    // Listen to RTDB for this user's hardware data
+    const basePath = `users/${user.id}/hardware`;
+    const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
+    const statusRef = ref(rtdb, `${basePath}/status`);
+    const appliancesRef = ref(rtdb, `${basePath}/appliances`);
+
+    const unsubscribeSensors = onValue(sensorsRef, (snapshot) => {
       if (snapshot.exists()) {
-        setGridData(snapshot.val());
+        const data = snapshot.val();
+        setGridData(prev => ({
+          ...prev,
+          power: Math.round((data.power || 0) * 1000),
+          voltage: data.voltage || 0,
+          current: data.current || 0,
+          status: 'stable'
+        } as UserGridData));
       }
     });
 
-    // Listen to RTDB for device count
-    const devicesRef = ref(rtdb, `users/${user.id}/devices`);
-    const unsubscribeDevices = onValue(devicesRef, (snapshot) => {
+    const unsubscribeStatus = onValue(statusRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        setGridData(prev => ({
+          ...prev,
+          status: data.isOnline ? 'online' : 'offline'
+        } as UserGridData));
+      }
+    });
+
+    const unsubscribeAppliances = onValue(appliancesRef, (snapshot) => {
       if (snapshot.exists()) {
         setDeviceCount(Object.keys(snapshot.val()).length);
+      } else {
+        setDeviceCount(0);
       }
     });
 
     return () => {
-      unsubscribeGrid();
-      unsubscribeDevices();
+      unsubscribeSensors();
+      unsubscribeStatus();
+      unsubscribeAppliances();
     };
   }, [user.id]);
 
@@ -82,7 +104,7 @@ const UserRow: React.FC<{ user: UserData }> = ({ user }) => {
         <div className="flex items-center gap-2">
           <div className={cn(
             "w-2 h-2 rounded-full",
-            gridData?.status === 'stable' ? "bg-emerald-500" : "bg-rose-500"
+            gridData?.status === 'online' ? "bg-emerald-500" : "bg-rose-500"
           )} />
           <span className="text-sm font-bold text-slate-600 capitalize">
             {gridData?.status || 'Offline'}

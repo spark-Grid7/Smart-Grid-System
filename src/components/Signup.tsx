@@ -16,14 +16,20 @@ export const Signup = () => {
   const navigate = useNavigate();
 
   const initializeUserRTDB = async (uid: string) => {
-    const gridRef = ref(rtdb, `users/${uid}/grid`);
-    await set(gridRef, {
-      power: 0,
-      voltage: 0,
-      current: 0,
-      status: 'stable',
-      motor_status: false,
-      control: 'OFF'
+    const hardwareRef = ref(rtdb, `users/${uid}/hardware`);
+    await set(hardwareRef, {
+      sensors: {
+        realtime: { power: 0, voltage: 0, current: 0 }
+      },
+      status: {
+        isOnline: false,
+        isLinked: false,
+        lastSeen: 0
+      },
+      settings: {
+        ecoMode: false,
+        macAddress: ""
+      }
     });
   };
 
