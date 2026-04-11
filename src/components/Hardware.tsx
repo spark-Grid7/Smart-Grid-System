@@ -27,7 +27,7 @@ function cn(...inputs: ClassValue[]) {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Hardware = () => {
-  const { isOnline, hardwareId: linkedId, detectedMac } = useLoadShedding();
+  const { isOnline, hardwareId: linkedId, detectedMac, dbConnected } = useLoadShedding();
   const [hardwareId, setHardwareId] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [isPhysicallyLinked, setIsPhysicallyLinked] = useState(false);
@@ -311,8 +311,40 @@ export const Hardware = () => {
       )}
 
       <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+        <h3 className="text-lg font-bold text-slate-800 mb-4">Realtime Database Status</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="p-4 bg-white rounded-2xl border border-slate-100 flex items-center gap-3">
+            <div className={cn(
+              "p-2 rounded-lg",
+              dbConnected ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
+            )}>
+              <Activity size={20} className={dbConnected ? "animate-pulse" : ""} />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-bold uppercase">Connection</p>
+              <p className="text-sm font-bold text-slate-700">{dbConnected ? 'Connected to Firebase' : 'Reconnecting...'}</p>
+            </div>
+          </div>
+          <div className="p-4 bg-white rounded-2xl border border-slate-100 flex items-center gap-3">
+            <div className={cn(
+              "p-2 rounded-lg",
+              isOnline ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+            )}>
+              <Wifi size={20} />
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-bold uppercase">Hardware Data</p>
+              <p className="text-sm font-bold text-slate-700">{isOnline ? 'Receiving Live Packets' : 'No Data Received'}</p>
+            </div>
+          </div>
+        </div>
+
         <h3 className="text-lg font-bold text-slate-800 mb-4">Troubleshooting</h3>
         <ul className="space-y-3 text-slate-600 text-sm">
+          <li className="flex items-start gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+            <b>Firebase Rules:</b> Ensure your Realtime Database rules allow read/write access. For testing, set <code>".read": true, ".write": true</code>.
+          </li>
           <li className="flex items-start gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
             If data isn't appearing, ensure your ESP32 is connected to WiFi.

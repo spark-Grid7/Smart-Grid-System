@@ -31,7 +31,19 @@ export const useLoadShedding = () => {
   const [activePins, setActivePins] = useState<Record<string, boolean>>({});
   const [rtdbApplianceStatus, setRtdbApplianceStatus] = useState<Record<string, boolean>>({});
   const [detectedMac, setDetectedMac] = useState<string | null>(null);
+  const [dbConnected, setDbConnected] = useState(false);
   const GRID_CAPACITY = 4000;
+
+  useEffect(() => {
+    const connectedRef = ref(rtdb, '.info/connected');
+    const unsub = onValue(connectedRef, (snap) => {
+      const isConnected = snap.val() === true;
+      console.log(`[SmartGrid] RTDB Connection Status: ${isConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+      setDbConnected(isConnected);
+    });
+    return () => unsub();
+  }, []);
+
   const rawLoadPercentage = (livePower / GRID_CAPACITY) * 100;
   const loadPercentage = Math.min(100, Math.round(rawLoadPercentage));
 
@@ -298,5 +310,5 @@ export const useLoadShedding = () => {
     status: rtdbApplianceStatus[d.id] !== undefined ? rtdbApplianceStatus[d.id] : d.status
   }));
 
-  return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac };
+  return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac, dbConnected };
 };

@@ -42,7 +42,7 @@ import { DevicePower } from './DevicePower';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
-  const { livePower, voltage, current, loadPercentage, ecoMode, devices, hardwareId, isOnline, activePins } = useLoadShedding();
+  const { livePower, voltage, current, loadPercentage, ecoMode, devices, hardwareId, isOnline, activePins, dbConnected } = useLoadShedding();
   const [gridStatus, setGridStatus] = useState<'stable' | 'critical'>('stable');
   const [loading, setLoading] = useState(true);
 
@@ -61,50 +61,58 @@ export const Dashboard = () => {
         : `users/${uid}/hardware`;
       
       const hardwareRef = ref(rtdb, basePath);
-      const snapshot = await get(hardwareRef);
       
-      // Prepare appliances data from current Firestore devices
-      const appliances: Record<string, any> = {};
-      devices.forEach(d => {
-        appliances[d.id] = {
-          name: d.name,
-          pin: d.relayPin,
-          priority: d.priority,
-          status: d.status,
-          command: d.status ? "ON" : "OFF"
-        };
-      });
+      // Only try to initialize if we are actually connected to the DB
+      if (dbConnected) {
+        try {
+          const snapshot = await get(hardwareRef);
+          
+          // Prepare appliances data from current Firestore devices
+          const appliances: Record<string, any> = {};
+          devices.forEach(d => {
+            appliances[d.id] = {
+              name: d.name,
+              pin: d.relayPin,
+              priority: d.priority,
+              status: d.status,
+              command: d.status ? "ON" : "OFF"
+            };
+          });
 
-      if (!snapshot.exists()) {
-        await set(hardwareRef, {
-          sensors: {
-            realtime: { power: 0, voltage: 230, current: 0 }
-          },
-          status: {
-            isOnline: !hardwareId, // Always online in simulation mode
-            isLinked: !!hardwareId,
-            lastSeen: Date.now(),
-            verified_pins: {}
-          },
-          settings: {
-            ecoMode: ecoMode,
-            macAddress: hardwareId || "SIMULATED"
-          },
-          appliances: appliances,
-          schedules: {}
-        });
-      } else {
-        // Even if it exists, ensure appliances are synced if the folder is empty or missing
-        const data = snapshot.val();
-        if (!data.appliances || Object.keys(data.appliances).length === 0) {
-          await set(ref(rtdb, `${basePath}/appliances`), appliances);
+          if (!snapshot.exists()) {
+            await set(hardwareRef, {
+              sensors: {
+                realtime: { power: 0, voltage: 230, current: 0 }
+              },
+              status: {
+                isOnline: !hardwareId, // Always online in simulation mode
+                isLinked: !!hardwareId,
+                lastSeen: Date.now(),
+                verified_pins: {}
+              },
+              settings: {
+                ecoMode: ecoMode,
+                macAddress: hardwareId || "SIMULATED"
+              },
+              appliances: appliances,
+              schedules: {}
+            });
+          } else {
+            // Even if it exists, ensure appliances are synced if the folder is empty or missing
+            const data = snapshot.val();
+            if (!data.appliances || Object.keys(data.appliances).length === 0) {
+              await set(ref(rtdb, `${basePath}/appliances`), appliances);
+            }
+          }
+        } catch (e) {
+          console.error("[SmartGrid] Initialization failed", e);
         }
       }
     };
     initializeIfMissing();
 
     setLoading(false);
-  }, []);
+  }, [dbConnected]); // Re-run when connection is established
 
   const toggleEcoMode = async () => {
     if (!auth.currentUser) return;
@@ -166,6 +174,13 @@ export const Dashboard = () => {
             )}>
               {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
               {hardwareId ? (isOnline ? 'Hardware Online' : 'Hardware Offline') : 'Simulated Mode'}
+            </div>
+            <div className={cn(
+              "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+              dbConnected ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
+            )}>
+              <Activity size={12} className={dbConnected ? "animate-pulse" : ""} />
+              {dbConnected ? 'DB Connected' : 'DB Reconnecting...'}
             </div>
           </div>
         </div>
