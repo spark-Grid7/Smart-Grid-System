@@ -78,8 +78,8 @@ export const useLoadShedding = () => {
       const hardwareRef = ref(rtdb, basePath);
       const rootRef = mac ? ref(rtdb, mac) : null;
       
-      const handleData = (snapshot: any, isRoot: boolean) => {
-        if (!snapshot.exists()) return false;
+      const handleData = (snapshot: any) => {
+        if (!snapshot.exists()) return null;
 
         const data = snapshot.val();
         
@@ -119,78 +119,78 @@ export const useLoadShedding = () => {
 
         // Scaling logic: if < 20, assume kW and convert to W
         const finalP = p > 20 ? p : p * 1000;
-        setLivePower(Math.round(finalP));
-        setVoltage(v);
-        setCurrent(i || (finalP / v));
-
+        
         // 2. Handle Status & Online State
+        let online = false;
+        let pins = {};
         if (status) {
           const lastSeen = status.lastSeen;
           const now = Date.now();
-          
-          // CRITICAL FIX: If lastSeen is missing, trust isOnline flag if data is arriving.
-          // If lastSeen is present, check if it's within 60 seconds (more lenient).
           const isRecentlySeen = lastSeen ? (now - lastSeen < 60000) : true;
-          
-          setIsOnline((status.isOnline || false) && isRecentlySeen);
-          
-          if (status.verified_pins) {
-            setActivePins(status.verified_pins);
-          }
+          online = (status.isOnline || false) && isRecentlySeen;
+          if (status.verified_pins) pins = status.verified_pins;
         } else {
-          // Fallback: If we are getting sensor data, assume online
-          if (p > 0 || v !== 230) {
-            setIsOnline(true);
-          } else {
-            setIsOnline(false);
-          }
+          if (p > 0 || v !== 230) online = true;
         }
 
-        // 3. Handle Settings
-        if (settings) {
-          setEcoMode(settings.ecoMode || false);
-          setDetectedMac(settings.macAddress || null);
-        }
-
-        // 4. Handle Real-time Appliance Status
-        if (appliances) {
-          const statusMap: Record<string, boolean> = {};
-          Object.entries(appliances).forEach(([id, app]: [string, any]) => {
-            if (app) {
-              if (typeof app.status === 'boolean') {
-                statusMap[id] = app.status;
-              } else if (app.command === "ON") {
-                statusMap[id] = true;
-              } else if (app.command === "OFF") {
-                statusMap[id] = false;
-              }
-            }
-          });
-          setRtdbApplianceStatus(statusMap);
-        }
-        return true;
+        return {
+          power: Math.round(finalP),
+          voltage: v,
+          current: i || (finalP / v),
+          online,
+          pins,
+          ecoMode: settings?.ecoMode || false,
+          detectedMac: settings?.macAddress || null,
+          appliances: appliances || null
+        };
       };
 
-      // Use a single state to track if we found data in EITHER path
-      let primaryFound = false;
-      let rootFound = false;
+      // Track data from both paths
+      let primaryData: any = null;
+      let rootData: any = null;
 
-      const unsubPrimary = onValue(hardwareRef, (snapshot) => {
-        primaryFound = handleData(snapshot, false);
-        if (!primaryFound && !rootFound) {
+      const updateMergedState = () => {
+        const merged = primaryData || rootData;
+        if (merged) {
+          setLivePower(merged.power);
+          setVoltage(merged.voltage);
+          setCurrent(merged.current);
+          setIsOnline(merged.online);
+          setActivePins(merged.pins);
+          if (merged.ecoMode !== undefined) setEcoMode(merged.ecoMode);
+          if (merged.detectedMac !== undefined) setDetectedMac(merged.detectedMac);
+          
+          if (merged.appliances) {
+            const statusMap: Record<string, boolean> = {};
+            Object.entries(merged.appliances).forEach(([id, app]: [string, any]) => {
+              if (app) {
+                if (typeof app.status === 'boolean') {
+                  statusMap[id] = app.status;
+                } else if (app.command === "ON") {
+                  statusMap[id] = true;
+                } else if (app.command === "OFF") {
+                  statusMap[id] = false;
+                }
+              }
+            });
+            setRtdbApplianceStatus(statusMap);
+          }
+        } else {
           setIsOnline(false);
           setLivePower(0);
         }
+      };
+
+      const unsubPrimary = onValue(hardwareRef, (snapshot) => {
+        primaryData = handleData(snapshot);
+        updateMergedState();
       });
 
       let unsubRoot = () => {};
       if (rootRef) {
         unsubRoot = onValue(rootRef, (snapshot) => {
-          rootFound = handleData(snapshot, true);
-          if (!primaryFound && !rootFound) {
-            setIsOnline(false);
-            setLivePower(0);
-          }
+          rootData = handleData(snapshot);
+          updateMergedState();
         });
       }
 
@@ -216,7 +216,7 @@ export const useLoadShedding = () => {
       unsubscribeUser();
       unsubscribePower();
     };
-  }, []);
+  }, [auth.currentUser]);
 
   useEffect(() => {
     if (!ecoMode || devices.length === 0) return;
