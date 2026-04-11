@@ -357,8 +357,14 @@ export const Dashboard = () => {
               <AlertCircle size={24} />
             </div>
             <div>
-              <h4 className="font-bold text-amber-900">Hardware Offline</h4>
-              <p className="text-sm text-amber-700">Your ESP32 is not communicating. Dashboard values are frozen and remote control is disabled.</p>
+              <h4 className="font-bold text-amber-900">
+                {!dbConnected ? 'Database Reconnecting' : 'Hardware Data Missing'}
+              </h4>
+              <p className="text-sm text-amber-700">
+                {!dbConnected 
+                  ? 'The app is trying to reach Firebase. Check your internet connection.' 
+                  : 'Connected to Firebase, but no data is arriving from your ESP32. Check your hardware power and WiFi.'}
+              </p>
             </div>
           </div>
           <button 

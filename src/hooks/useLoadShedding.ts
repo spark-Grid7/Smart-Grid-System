@@ -32,6 +32,7 @@ export const useLoadShedding = () => {
   const [rtdbApplianceStatus, setRtdbApplianceStatus] = useState<Record<string, boolean>>({});
   const [detectedMac, setDetectedMac] = useState<string | null>(null);
   const [dbConnected, setDbConnected] = useState(false);
+  const [rawRtdbData, setRawRtdbData] = useState<any>(null);
   const GRID_CAPACITY = 4000;
 
   useEffect(() => {
@@ -95,38 +96,35 @@ export const useLoadShedding = () => {
 
         const data = snapshot.val();
         
-        // 1. Handle Power/Voltage/Current
-        let p = 0;
-        let v = 230;
-        let i = 0;
+        // DEEP SEARCH: Find power, voltage, current anywhere in the object
+        // This handles cases where the ESP32 might be writing to a different nested structure
+        const findValue = (obj: any, keys: string[]): any => {
+          if (!obj || typeof obj !== 'object') return undefined;
+          for (const key of keys) {
+            if (obj[key] !== undefined) return obj[key];
+          }
+          for (const key in obj) {
+            const val = findValue(obj[key], keys);
+            if (val !== undefined) return val;
+          }
+          return undefined;
+        };
 
-        // Support both direct and nested 'info' structure
+        let p = findValue(data, ['power', 'p', 'watts', 'P', 'realtime_power']) ?? 0;
+        let v = findValue(data, ['voltage', 'v', 'V', 'volts']) ?? 230;
+        let i = findValue(data, ['current', 'i', 'I', 'amps']) ?? 0;
+
+        // Support nested 'info' or 'sensors' if found
         const sensors = data.sensors || data.info?.sensors;
         const status = data.status || data.info?.status;
         const settings = data.settings || data.info?.settings;
         const appliances = data.appliances || data.info?.appliances;
 
-        if (mac) {
-          if (sensors?.realtime) {
-            const rt = sensors.realtime;
-            p = typeof rt === 'number' ? rt : (rt.power || 0);
-            v = rt.voltage || 230;
-            i = rt.current || 0;
-          }
-        } else {
-          // Simulation Mode: Be flexible
-          if (typeof data === 'number') {
-            p = data;
-          } else if (sensors?.realtime) {
-            const rt = sensors.realtime;
-            p = typeof rt === 'number' ? rt : (rt.power || 0);
-            v = rt.voltage || 230;
-            i = rt.current || 0;
-          } else if (data.power !== undefined) {
-            p = data.power;
-            v = data.voltage || 230;
-            i = data.current || 0;
-          }
+        if (sensors?.realtime) {
+          const rt = sensors.realtime;
+          p = typeof rt === 'number' ? rt : (rt.power ?? p);
+          v = rt.voltage ?? v;
+          i = rt.current ?? i;
         }
 
         // Scaling logic: if < 20, assume kW and convert to W
@@ -138,11 +136,14 @@ export const useLoadShedding = () => {
         if (status) {
           const lastSeen = status.lastSeen;
           const now = Date.now();
-          const isRecentlySeen = lastSeen ? (now - lastSeen < 60000) : true;
+          const isRecentlySeen = lastSeen ? (now - lastSeen < 120000) : true; // 2 minute grace
           online = (status.isOnline || false) && isRecentlySeen;
           if (status.verified_pins) pins = status.verified_pins;
-        } else {
-          if (p > 0 || v !== 230) online = true;
+        } 
+        
+        // Fallback: if we see power or voltage changing, it's online
+        if (!online && (p > 0 || v !== 230)) {
+          online = true;
         }
 
         return {
@@ -153,7 +154,8 @@ export const useLoadShedding = () => {
           pins,
           ecoMode: settings?.ecoMode || false,
           detectedMac: settings?.macAddress || null,
-          appliances: appliances || null
+          appliances: appliances || null,
+          raw: data // Keep raw for debugging
         };
       };
 
@@ -199,9 +201,11 @@ export const useLoadShedding = () => {
             });
             setRtdbApplianceStatus(statusMap);
           }
+          setRawRtdbData(merged.raw);
         } else {
           setIsOnline(false);
           setLivePower(0);
+          setRawRtdbData(null);
         }
       };
 
@@ -310,5 +314,5 @@ export const useLoadShedding = () => {
     status: rtdbApplianceStatus[d.id] !== undefined ? rtdbApplianceStatus[d.id] : d.status
   }));
 
-  return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac, dbConnected };
+  return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac, dbConnected, rawRtdbData };
 };

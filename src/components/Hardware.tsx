@@ -27,8 +27,9 @@ function cn(...inputs: ClassValue[]) {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Hardware = () => {
-  const { isOnline, hardwareId: linkedId, detectedMac, dbConnected } = useLoadShedding();
+  const { isOnline, hardwareId: linkedId, detectedMac, dbConnected, rawRtdbData } = useLoadShedding();
   const [hardwareId, setHardwareId] = useState('');
+  const [showRawData, setShowRawData] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
   const [isPhysicallyLinked, setIsPhysicallyLinked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -340,6 +341,39 @@ export const Hardware = () => {
         </div>
 
         <h3 className="text-lg font-bold text-slate-800 mb-4">Troubleshooting</h3>
+        
+        <div className="mb-6">
+          <button 
+            onClick={() => setShowRawData(!showRawData)}
+            className="flex items-center gap-2 text-blue-600 font-bold text-sm hover:underline mb-4"
+          >
+            <Activity size={16} />
+            {showRawData ? 'Hide Live Data Inspector' : 'Show Live Data Inspector'}
+          </button>
+          
+          <AnimatePresence>
+            {showRawData && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-slate-900 rounded-2xl p-6 overflow-hidden border border-slate-800"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Incoming JSON Stream</h4>
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-500 animate-pulse" : "bg-slate-600")} />
+                    <span className="text-[10px] text-slate-500 font-mono">{isOnline ? 'STREAMING' : 'IDLE'}</span>
+                  </div>
+                </div>
+                <pre className="text-emerald-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap max-h-64">
+                  {rawRtdbData ? JSON.stringify(rawRtdbData, null, 2) : '// No data received yet. Ensure your ESP32 is writing to the correct path.'}
+                </pre>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         <ul className="space-y-3 text-slate-600 text-sm">
           <li className="flex items-start gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
