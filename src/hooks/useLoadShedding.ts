@@ -96,12 +96,12 @@ export const useLoadShedding = () => {
         if (!snapshot.exists()) return null;
 
         const data = snapshot.val();
+        console.log("[SmartGrid] Raw Data Keys:", Object.keys(data));
         
         // DEEP SEARCH: Find power, voltage, current anywhere in the object
         const findValue = (obj: any, keys: string[]): any => {
           if (obj === null || obj === undefined) return undefined;
           
-          // If it's a direct number or string that can be a number
           if (typeof obj === 'number') return obj;
           if (typeof obj === 'string' && !isNaN(parseFloat(obj))) return parseFloat(obj);
 
@@ -122,43 +122,41 @@ export const useLoadShedding = () => {
           return undefined;
         };
 
-        let p = findValue(data, ['power', 'p', 'watts', 'P', 'realtime_power', 'value', 'data', 'load']) ?? 0;
-        let v = findValue(data, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
-        let i = findValue(data, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
+        // Explicitly look for the structure in the screenshot: info/sensors/realtime
+        const rt = data.info?.sensors?.realtime || data.sensors?.realtime || data.realtime;
+        
+        let p = findValue(rt || data, ['power', 'p', 'watts', 'P', 'realtime_power', 'load']) ?? 0;
+        let v = findValue(rt || data, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
+        let i = findValue(rt || data, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
 
-        // Support nested 'info' or 'sensors' if found
-        const sensors = data.sensors || data.info?.sensors;
+        // Scaling logic: if < 20, assume kW and convert to W
+        let finalP = p > 20 ? p : p * 1000;
+        
+        // POWER CALCULATION FALLBACK:
+        // If power is suspiciously low (e.g., < 5W) but current is high (> 0.1A), 
+        // calculate power from V * I
+        if (finalP < 5 && i > 0.1) {
+          console.log(`[SmartGrid] Power suspiciously low (${finalP}W). Calculating from I (${i}A) * V (${v}V)`);
+          finalP = i * v;
+        }
+
+        // 2. Handle Status & Online State
+        let online = false;
+        let pins = {};
         const status = data.status || data.info?.status;
         const settings = data.settings || data.info?.settings;
         const appliances = data.appliances || data.info?.appliances;
 
-        if (sensors?.realtime) {
-          const rt = sensors.realtime;
-          const nestedP = findValue(rt, ['power', 'p', 'watts', 'P']);
-          const nestedV = findValue(rt, ['voltage', 'v', 'V', 'volts']);
-          const nestedI = findValue(rt, ['current', 'i', 'I', 'amps']);
-          
-          p = nestedP ?? p;
-          v = nestedV ?? v;
-          i = nestedI ?? i;
-        }
-
-        // Scaling logic: if < 20, assume kW and convert to W
-        const finalP = p > 20 ? p : p * 1000;
-        
-        // 2. Handle Status & Online State
-        let online = false;
-        let pins = {};
         if (status) {
           const lastSeen = status.lastSeen;
           const now = Date.now();
-          const isRecentlySeen = lastSeen ? (now - lastSeen < 180000) : true; // 3 minute grace
+          const isRecentlySeen = lastSeen ? (now - lastSeen < 300000) : true; // 5 minute grace
           online = (status.isOnline || false) && isRecentlySeen;
           if (status.verified_pins) pins = status.verified_pins;
         } 
         
         // Fallback: if we see power or voltage changing, it's online
-        if (!online && (p > 0 || (v > 100 && v < 300))) {
+        if (!online && (finalP > 0 || (v > 100 && v < 300))) {
           online = true;
         }
 
@@ -183,9 +181,9 @@ export const useLoadShedding = () => {
       const updateMergedState = () => {
         // CRITICAL: Prioritize the data source that is actually ONLINE or has POWER
         // This solves the issue where the 'empty' user folder was blocking the 'active' root folder
-        const isPrimaryActive = primaryData?.online || (primaryData?.power && primaryData.power > 0);
-        const isRootActive = rootData?.online || (rootData?.power && rootData.power > 0);
-        const isPowerActive = powerData?.power && powerData.power > 0;
+        const isPrimaryActive = !!primaryData && (primaryData.online || primaryData.power > 0 || primaryData.current > 0);
+        const isRootActive = !!rootData && (rootData.online || rootData.power > 0 || rootData.current > 0);
+        const isPowerActive = !!powerData && (powerData.power > 0 || powerData.current > 0);
 
         console.log(`[SmartGrid] Data Sync - Primary: ${isPrimaryActive ? 'ACTIVE' : 'IDLE'}, Root: ${isRootActive ? 'ACTIVE' : 'IDLE'}, PowerNode: ${isPowerActive ? 'ACTIVE' : 'IDLE'}`);
 
