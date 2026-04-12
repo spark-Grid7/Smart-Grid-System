@@ -23,8 +23,8 @@ export const DevicePower = ({ pin }: DevicePowerProps) => {
       if (docSnap.exists()) {
         const hId = docSnap.data().hardwareId;
         const basePath = hId 
-          ? `users/${uid}/hardware/${hId}/appliances/${pin}`
-          : `users/${uid}/hardware/appliances/${pin}`;
+          ? `${uid}/hardware/${hId}/appliances/${pin}`
+          : `${uid}/hardware/appliances/${pin}`;
         
         const powerRef = ref(rtdb, `${basePath}/power`);
         

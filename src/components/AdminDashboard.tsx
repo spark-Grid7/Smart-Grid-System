@@ -49,8 +49,8 @@ const UserRow: React.FC<{ user: UserData }> = ({ user }) => {
         
         // 2. Listen to RTDB using the hardwareId
         const basePath = hId 
-          ? `users/${user.id}/hardware/${hId}`
-          : `users/${user.id}/hardware`;
+          ? `${user.id}/hardware/${hId}`
+          : `${user.id}/hardware`;
           
         const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
         const statusRef = ref(rtdb, `${basePath}/status`);

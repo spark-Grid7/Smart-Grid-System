@@ -49,6 +49,9 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
   return <Layout>{children}</Layout>;
 };
 
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 function App() {
   return (
     <Router>
@@ -65,6 +68,7 @@ function App() {
         <Route path="/admin" element={<PrivateRoute adminOnly><AdminDashboard /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <ToastContainer aria-label="Notifications" />
     </Router>
   );
 }

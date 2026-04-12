@@ -19,6 +19,8 @@ interface Device {
   relayPin: number;
 }
 
+import { toast } from 'react-toastify';
+
 export const useLoadShedding = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [ecoMode, setEcoMode] = useState(false);
@@ -84,25 +86,26 @@ export const useLoadShedding = () => {
       setActivePins({});
 
       const basePath = mac 
-        ? `users/${uid}/hardware/${mac}`
-        : `users/${uid}/hardware`;
+        ? `${uid}/hardware/${mac}`
+        : `${uid}/hardware`;
       
       console.log(`[SmartGrid] Monitoring Path: ${basePath}`);
       
       const hardwareRef = ref(rtdb, basePath);
-      const rootRef = mac ? ref(rtdb, `hardware/${mac}`) : null;
       
       const handleData = (snapshot: any) => {
-        if (!snapshot.exists()) return null;
+        if (!snapshot.exists()) {
+          setIsOnline(false);
+          setLivePower(0);
+          return;
+        }
 
         const data = snapshot.val();
-        console.log("[SmartGrid] Raw Data Keys:", Object.keys(data));
         
         // DEEP SEARCH: Find power, voltage, current anywhere in the object
         const findValue = (obj: any, keys: string[]): any => {
           if (!obj || typeof obj !== 'object') return undefined;
 
-          // 1. Check direct keys first (highest priority)
           for (const key of keys) {
             if (obj[key] !== undefined) {
               const val = obj[key];
@@ -111,8 +114,6 @@ export const useLoadShedding = () => {
             }
           }
 
-          // 2. Recurse into children ONLY if they are objects
-          // This prevents picking up random numbers from arrays or primitive values (like pin 26)
           for (const key in obj) {
             if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
               const val = findValue(obj[key], keys);
@@ -122,133 +123,66 @@ export const useLoadShedding = () => {
           return undefined;
         };
 
-        // Explicitly look for the structure in the screenshot: info/sensors/realtime
-        const rt = data.info?.sensors?.realtime || data.sensors?.realtime || data.realtime;
+        // Explicitly look for the structure: sensors/realtime
+        const rt = data.sensors?.realtime || data.info?.sensors?.realtime || data.realtime || data;
         
-        const p = findValue(rt || data, ['power', 'p', 'watts', 'P', 'realtime_power', 'load']) ?? 0;
-        const v = findValue(rt || data, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
-        const i = findValue(rt || data, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
+        const p = findValue(rt, ['power', 'p', 'watts', 'P', 'realtime_power', 'load']) ?? 0;
+        const v = findValue(rt, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
+        const i = findValue(rt, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
 
-        console.log(`[SmartGrid] Raw Found - P: ${p}, V: ${v}, I: ${i}`);
-
-        // Scaling logic: Only scale if voltage is high (AC) and power is tiny (kW)
-        // For DC systems (like 5V), we use the values exactly as they are.
         let finalP = p;
         if (v > 100 && p > 0 && p < 20) {
-          finalP = p * 1000; // Assume kW -> W for AC
+          finalP = p * 1000; 
         }
         
-        // POWER CALCULATION LOGIC:
-        // If reported power is 0 or suspiciously inconsistent with V*I, recalculate
         if (i > 0.01) {
           const calculatedP = i * v;
-          // If reported power is near zero but we have current, use calculated
           if (finalP < 0.1 && calculatedP > 0.1) {
-            console.log(`[SmartGrid] Using Calculated Power: ${Math.round(calculatedP)}W (based on ${i}A * ${v}V)`);
             finalP = calculatedP;
           }
         }
 
-        // 2. Handle Status & Online State
-        let online = false;
-        let pins = {};
+        setLivePower(Math.round(finalP));
+        setVoltage(Math.round(v));
+        setCurrent(Number(i.toFixed(3)));
+        setIsOnline(true);
+        setDataSource(snapshot.ref.toString());
+        setRawRtdbData(data);
+
+        // Handle Status & Settings
         const status = data.status || data.info?.status;
         const settings = data.settings || data.info?.settings;
         const appliances = data.appliances || data.info?.appliances;
 
-        if (status) {
-          const lastSeen = status.lastSeen;
-          const now = Date.now();
-          const isRecentlySeen = lastSeen ? (now - lastSeen < 300000) : true; // 5 minute grace
-          online = (status.isOnline || false) && isRecentlySeen;
-          if (status.verified_pins) pins = status.verified_pins;
-        } 
-        
-        // Fallback: if we see power or voltage changing, it's online
-        if (!online && (finalP > 0 || (v > 100 && v < 300))) {
-          online = true;
-        }
+        if (settings?.ecoMode !== undefined) setEcoMode(settings.ecoMode);
+        if (settings?.macAddress !== undefined) setDetectedMac(settings.macAddress);
 
-        return {
-          power: Math.round(finalP),
-          voltage: v,
-          current: i || (finalP / (v || 230)),
-          online,
-          pins,
-          ecoMode: settings?.ecoMode || false,
-          detectedMac: settings?.macAddress || null,
-          appliances: appliances || null,
-          raw: data
-        };
-      };
-
-      // Track data from both paths
-      let primaryData: any = null;
-      let rootData: any = null;
-
-      const updateMergedState = () => {
-        // CRITICAL: Prioritize the data source that is actually ONLINE or has POWER
-        // This solves the issue where the 'empty' user folder was blocking the 'active' root folder
-        const isPrimaryActive = !!primaryData && (primaryData.online || primaryData.power > 0 || primaryData.current > 0);
-        const isRootActive = !!rootData && (rootData.online || rootData.power > 0 || rootData.current > 0);
-
-        console.log(`[SmartGrid] Data Sync - Primary: ${isPrimaryActive ? 'ACTIVE' : 'IDLE'}, Root: ${isRootActive ? 'ACTIVE' : 'IDLE'}`);
-
-        const merged = isPrimaryActive 
-          ? { ...primaryData, source: 'User Hardware Path' } 
-          : isRootActive
-            ? { ...rootData, source: 'Root MAC Path' }
-            : primaryData ? { ...primaryData, source: 'User Hardware Path (Idle)' } : rootData ? { ...rootData, source: 'Root MAC Path (Idle)' } : null;
-
-        if (merged) {
-          setLivePower(merged.power);
-          setVoltage(merged.voltage);
-          setCurrent(merged.current);
-          setIsOnline(merged.online);
-          setActivePins(merged.pins || {});
-          setDataSource(merged.source || 'Unknown');
-          if (merged.ecoMode !== undefined) setEcoMode(merged.ecoMode);
-          if (merged.detectedMac !== undefined) setDetectedMac(merged.detectedMac);
-          
-          if (merged.appliances) {
-            const statusMap: Record<string, boolean> = {};
-            Object.entries(merged.appliances).forEach(([id, app]: [string, any]) => {
-              if (app) {
-                if (typeof app.status === 'boolean') {
-                  statusMap[id] = app.status;
-                } else if (app.command === "ON") {
-                  statusMap[id] = true;
-                } else if (app.command === "OFF") {
-                  statusMap[id] = false;
-                }
+        if (appliances) {
+          const statusMap: Record<string, boolean> = {};
+          const pins: Record<number, boolean> = {};
+          Object.entries(appliances).forEach(([id, app]: [string, any]) => {
+            if (app) {
+              if (typeof app.status === 'boolean') {
+                statusMap[id] = app.status;
+              } else if (app.command === "ON") {
+                statusMap[id] = true;
+              } else if (app.command === "OFF") {
+                statusMap[id] = false;
               }
-            });
-            setRtdbApplianceStatus(statusMap);
-          }
-          setRawRtdbData(merged.raw);
-        } else {
-          setIsOnline(false);
-          setLivePower(0);
-          setRawRtdbData(null);
+              if (app.pin !== undefined) {
+                pins[app.pin] = statusMap[id];
+              }
+            }
+          });
+          setRtdbApplianceStatus(statusMap);
+          setActivePins(pins);
         }
       };
 
-      const unsubPrimary = onValue(hardwareRef, (snapshot) => {
-        primaryData = handleData(snapshot);
-        updateMergedState();
-      });
-
-      let unsubRoot = () => {};
-      if (rootRef) {
-        unsubRoot = onValue(rootRef, (snapshot) => {
-          rootData = handleData(snapshot);
-          updateMergedState();
-        });
-      }
+      const unsub = onValue(hardwareRef, handleData);
 
       return () => {
-        unsubPrimary();
-        unsubRoot();
+        unsub();
       };
     };
 
@@ -276,34 +210,30 @@ export const useLoadShedding = () => {
     const enforceShedding = async () => {
       const updates: Promise<any>[] = [];
       let changed = false;
+      const shedDevices: string[] = [];
       
+      const p = livePower;
+      const limit = 4000; 
+      
+      console.log(`[SmartGrid] Checking Shedding - Power: ${p}W, Limit: ${limit}W, Eco: ${ecoMode}`);
+
       for (const device of devices) {
-        // Priority 1 = High, Priority 2 = Medium, Priority 3 = Low
-        // User's ESP32 code: 
-        // if (power > SHED_75) controlByPriority(4, false);
-        // if (power > SHED_85) controlByPriority(3, false);
-        // if (power > POWER_LIMIT) controlByPriority(2, false);
-        
         let shouldBeOff = false;
-        const p = livePower;
-        const limit = 4000; // Matching ESP32 POWER_LIMIT
         
-        if (p > limit) {
-          // Shed High (1), Medium (2), and Low (3)
+        if (p >= limit) {
           if (device.priority >= 1) shouldBeOff = true;
-        } else if (p > (limit * 0.85)) {
-          // Shed Medium (2) and Low (3)
+        } else if (p >= (limit * 0.85)) {
           if (device.priority >= 2) shouldBeOff = true;
-        } else if (p > (limit * 0.50)) {
-          // Shed Low (3) only
+        } else if (p >= (limit * 0.70)) {
           if (device.priority >= 3) shouldBeOff = true;
         }
 
         if (shouldBeOff && device.status) {
+          console.log(`[SmartGrid] SHEDDING DEVICE: ${device.name} (Priority ${device.priority})`);
           const deviceRef = doc(db, 'devices', device.id);
           const basePath = hardwareId 
-            ? `users/${auth.currentUser.uid}/hardware/${hardwareId}`
-            : `users/${auth.currentUser.uid}/hardware`;
+            ? `${auth.currentUser.uid}/hardware/${hardwareId}`
+            : `${auth.currentUser.uid}/hardware`;
           
           const rtdbRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
           
@@ -311,13 +241,24 @@ export const useLoadShedding = () => {
           updates.push(set(rtdbRef, "OFF"));
 
           changed = true;
+          shedDevices.push(device.name);
         }
       }
 
       if (updates.length > 0) {
         try {
           await Promise.all(updates);
-          if (changed) setLastShedTime(new Date().toLocaleTimeString());
+          if (changed) {
+            setLastShedTime(new Date().toLocaleTimeString());
+            toast.warning(`Load Shedding Active: Turned off ${shedDevices.join(', ')} due to high power load (${livePower}W)`, {
+              position: "top-right",
+              autoClose: 5000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+            });
+          }
         } catch (e) {
           console.error("Rapid shedding failed", e);
         }

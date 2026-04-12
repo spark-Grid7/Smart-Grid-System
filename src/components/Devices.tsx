@@ -70,7 +70,7 @@ export const Devices = () => {
       // Sync to Realtime Database for ESP32
       const uid = auth.currentUser.uid;
       if (hardwareId) {
-        const basePath = `users/${uid}/hardware/${hardwareId}/appliances/${docRef.id}`;
+        const basePath = `${uid}/hardware/${hardwareId}/appliances/${docRef.id}`;
         await set(ref(rtdb, basePath), {
           name: newDevice.name,
           pin: newDevice.relayPin,
@@ -81,7 +81,7 @@ export const Devices = () => {
         });
       } else {
         // Fallback or simulation path
-        const basePath = `users/${uid}/hardware/appliances/${docRef.id}`;
+        const basePath = `${uid}/hardware/appliances/${docRef.id}`;
         await set(ref(rtdb, basePath), {
           name: newDevice.name,
           pin: newDevice.relayPin,
@@ -104,8 +104,8 @@ export const Devices = () => {
     try {
       const uid = auth.currentUser.uid;
       const basePath = hardwareId 
-        ? `users/${uid}/hardware/${hardwareId}/appliances/${id}`
-        : `users/${uid}/hardware/appliances/${id}`;
+        ? `${uid}/hardware/${hardwareId}/appliances/${id}`
+        : `${uid}/hardware/appliances/${id}`;
       await set(ref(rtdb, basePath), null);
 
       await deleteDoc(doc(db, 'devices', id));
