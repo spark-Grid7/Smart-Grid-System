@@ -114,6 +114,20 @@ export const Dashboard = () => {
     setLoading(false);
   }, [dbConnected]); // Re-run when connection is established
 
+  const [simPower, setSimPower] = useState(0);
+  const [simVoltage, setSimVoltage] = useState(230);
+
+  const updateSimulation = async (power: number, v: number) => {
+    if (!auth.currentUser || hardwareId) return;
+    const uid = auth.currentUser.uid;
+    const basePath = `${uid}/hardware/sensors/realtime`;
+    await set(ref(rtdb, basePath), {
+      power: power,
+      voltage: v,
+      current: Number((power / v).toFixed(2))
+    });
+  };
+
   const toggleEcoMode = async () => {
     if (!auth.currentUser) return;
     try {
@@ -398,6 +412,86 @@ export const Dashboard = () => {
             >
               Manage Grid
             </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Simulation Controls - Only visible when no hardware is linked */}
+      {!hardwareId && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
+              <Activity size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">Simulation Controls</h2>
+              <p className="text-slate-400 text-sm">Manually adjust grid parameters to test load shedding logic</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div className="flex justify-between items-end">
+                <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Simulated Power Load</label>
+                <span className="text-2xl font-mono text-amber-400 font-bold">{simPower} W</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="6000" 
+                step="50"
+                value={simPower}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setSimPower(val);
+                  updateSimulation(val, simVoltage);
+                }}
+                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 font-bold">
+                <span>0 W</span>
+                <span>3000 W (Warning)</span>
+                <span>6000 W (Critical)</span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-end">
+                <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Simulated Voltage</label>
+                <span className="text-2xl font-mono text-blue-400 font-bold">{simVoltage} V</span>
+              </div>
+              <input 
+                type="range" 
+                min="160" 
+                max="260" 
+                step="1"
+                value={simVoltage}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setSimVoltage(val);
+                  updateSimulation(simPower, val);
+                }}
+                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 font-bold">
+                <span>160 V</span>
+                <span>230 V (Normal)</span>
+                <span>260 V</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50 flex items-center gap-3">
+            <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg">
+              <Zap size={16} />
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              <span className="text-blue-400 font-bold">Pro Tip:</span> Slide the power above <span className="text-white font-bold">3000W</span> with <span className="text-emerald-400 font-bold">Eco Mode ON</span> to see the system automatically turn off low-priority devices.
+            </p>
           </div>
         </motion.div>
       )}

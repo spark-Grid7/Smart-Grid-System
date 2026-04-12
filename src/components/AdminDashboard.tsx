@@ -63,7 +63,7 @@ const UserRow: React.FC<{ user: UserData }> = ({ user }) => {
             const data = snapshot.val();
             setGridData(prev => ({
               ...prev,
-              power: Math.round((data.power || 0) * 1000),
+              power: Math.round(data.power || 0),
               voltage: data.voltage || 0,
               current: data.current || 0,
               status: 'stable'
