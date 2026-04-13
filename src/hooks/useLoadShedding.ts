@@ -51,6 +51,12 @@ export const useLoadShedding = () => {
   const rawLoadPercentage = (livePower / GRID_CAPACITY) * 100;
   const loadPercentage = Math.min(100, Math.round(rawLoadPercentage));
 
+  // Merge Firestore devices with RTDB real-time status
+  const mergedDevices = devices.map(d => ({
+    ...d,
+    status: rtdbApplianceStatus[d.id] !== undefined ? rtdbApplianceStatus[d.id] : d.status
+  }));
+
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -209,7 +215,7 @@ export const useLoadShedding = () => {
   }, [auth.currentUser]);
 
   useEffect(() => {
-    if (!ecoMode || devices.length === 0) return;
+    if (!ecoMode || mergedDevices.length === 0) return;
 
     const enforceShedding = async () => {
       const updates: Promise<any>[] = [];
@@ -218,30 +224,37 @@ export const useLoadShedding = () => {
       
       const p = livePower;
       const limit = 4000; 
+      const loadPct = (p / limit) * 100;
       
-      console.log(`[SmartGrid] Checking Shedding - Power: ${p}W, Limit: ${limit}W, Eco: ${ecoMode}`);
+      console.log(`[SmartGrid] Checking Shedding - Power: ${p}W (${loadPct.toFixed(1)}%), Limit: ${limit}W, Eco: ${ecoMode}`);
 
-      // Use mergedDevices to get the real-time status from RTDB
       for (const device of mergedDevices) {
         let shouldBeOff = false;
         
-        if (p >= limit) {
-          if (device.priority >= 1) shouldBeOff = true;
-        } else if (p >= (limit * 0.85)) {
+        // Thresholds:
+        // > 85% (High): Priority 2, 3 off
+        // > 75% (Warning): Priority 3 off
+        // Priority 1: NEVER OFF (per user request)
+        
+        if (loadPct >= 85) {
           if (device.priority >= 2) shouldBeOff = true;
-        } else if (p >= (limit * 0.70)) {
+        } else if (loadPct >= 75) {
           if (device.priority >= 3) shouldBeOff = true;
         }
 
         if (shouldBeOff && device.status) {
           console.log(`[SmartGrid] SHEDDING DEVICE: ${device.name} (Priority ${device.priority})`);
           const deviceRef = doc(db, 'devices', device.id);
-          const basePath = `users/${auth.currentUser.uid}/hardware`;
+          const uid = auth.currentUser?.uid?.trim();
+          if (!uid) continue;
           
-          const rtdbRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
+          const basePath = `users/${uid}/hardware`;
+          const rtdbCmdRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
+          const rtdbStatusRef = ref(rtdb, `${basePath}/appliances/${device.id}/status`);
           
           updates.push(updateDoc(deviceRef, { status: false }));
-          updates.push(set(rtdbRef, "OFF"));
+          updates.push(set(rtdbCmdRef, "OFF"));
+          updates.push(set(rtdbStatusRef, false));
 
           changed = true;
           shedDevices.push(device.name);
@@ -253,13 +266,12 @@ export const useLoadShedding = () => {
           await Promise.all(updates);
           if (changed) {
             setLastShedTime(new Date().toLocaleTimeString());
-            toast.warning(`Load Shedding Active: Turned off ${shedDevices.join(', ')} due to high power load (${livePower}W)`, {
-              position: "top-right",
-              autoClose: 5000,
-              hideProgressBar: false,
-              closeOnClick: true,
-              pauseOnHover: true,
-              draggable: true,
+            // Show separate toasts for each device as requested
+            shedDevices.forEach(name => {
+              toast.warning(`Load Shedding: ${name} turned off to protect grid`, {
+                position: "top-right",
+                autoClose: 4000,
+              });
             });
           }
         } catch (e) {
@@ -269,18 +281,12 @@ export const useLoadShedding = () => {
     };
 
     enforceShedding();
-  }, [livePower, ecoMode, devices]);
+  }, [livePower, ecoMode, mergedDevices]);
 
   const isShedding = ecoMode && (
-    (livePower > 3400 && devices.some(d => d.priority >= 2 && !d.status)) ||
-    (livePower > 3000 && devices.some(d => d.priority >= 3 && !d.status))
+    (loadPercentage >= 85 && mergedDevices.some(d => d.priority >= 2 && d.status)) ||
+    (loadPercentage >= 75 && mergedDevices.some(d => d.priority >= 3 && d.status))
   );
-
-  // Merge Firestore devices with RTDB real-time status
-  const mergedDevices = devices.map(d => ({
-    ...d,
-    status: rtdbApplianceStatus[d.id] !== undefined ? rtdbApplianceStatus[d.id] : d.status
-  }));
 
   return { livePower, voltage, current, loadPercentage, ecoMode, devices: mergedDevices, lastShedTime, isShedding, hardwareId, isOnline, activePins, detectedMac, dbConnected, rawRtdbData, dataSource };
 };

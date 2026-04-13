@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   RefreshCw,
   Wifi,
-  WifiOff
+  WifiOff,
+  Smartphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -27,7 +28,18 @@ function cn(...inputs: ClassValue[]) {
 import { useLoadShedding } from '../hooks/useLoadShedding';
 
 export const Hardware = () => {
-  const { isOnline, hardwareId: linkedId, detectedMac, dbConnected, rawRtdbData, dataSource, voltage, current, livePower } = useLoadShedding();
+  const { 
+    isOnline, 
+    hardwareId: linkedId, 
+    detectedMac, 
+    dbConnected, 
+    rawRtdbData, 
+    dataSource, 
+    voltage, 
+    current, 
+    livePower,
+    activePins 
+  } = useLoadShedding();
   const [hardwareId, setHardwareId] = useState('');
   const [showRawData, setShowRawData] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
@@ -392,11 +404,11 @@ export const Hardware = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
               <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Voltage</p>
-              <p className="text-2xl font-mono text-blue-400">{voltage.toFixed(2)}<span className="text-sm ml-1 text-slate-500">V</span></p>
+              <p className="text-2xl font-mono text-blue-400">{(Number(voltage) || 0).toFixed(2)}<span className="text-sm ml-1 text-slate-500">V</span></p>
             </div>
             <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
               <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Current</p>
-              <p className="text-2xl font-mono text-emerald-400">{current.toFixed(3)}<span className="text-sm ml-1 text-slate-500">A</span></p>
+              <p className="text-2xl font-mono text-emerald-400">{(Number(current) || 0).toFixed(3)}<span className="text-sm ml-1 text-slate-500">A</span></p>
             </div>
             <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
               <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Power</p>

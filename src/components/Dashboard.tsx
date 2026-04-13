@@ -47,7 +47,8 @@ export const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   const GRID_CAPACITY = 4000; // Matching ESP32 POWER_LIMIT
-  const isHighLoad = loadPercentage > 85;
+  const isHighLoad = loadPercentage >= 93;
+  const isWarningLoad = loadPercentage >= 75;
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -283,7 +284,7 @@ export const Dashboard = () => {
           <div className="flex items-center justify-between mb-4">
             <div className={cn(
               "p-3 rounded-2xl",
-              isHighLoad ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"
+              isHighLoad ? "bg-rose-50 text-rose-600" : isWarningLoad ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600"
             )}>
               <Activity size={24} />
             </div>
@@ -291,16 +292,16 @@ export const Dashboard = () => {
               <span className="text-xs font-bold text-slate-400 uppercase">Load</span>
               <p className={cn(
                 "text-sm font-bold",
-                isHighLoad ? "text-rose-600" : "text-emerald-600"
+                isHighLoad ? "text-rose-600" : isWarningLoad ? "text-amber-600" : "text-emerald-600"
               )}>{loadPercentage}%</p>
             </div>
           </div>
           <h3 className="text-slate-500 text-xs font-medium">Shedding</h3>
           <p className={cn(
             "text-lg font-bold mt-1",
-            isHighLoad && ecoMode ? "text-rose-600" : "text-slate-900"
+            isWarningLoad && ecoMode ? "text-amber-600" : "text-slate-900"
           )}>
-            {isHighLoad && ecoMode ? 'Active' : 'Standby'}
+            {isWarningLoad && ecoMode ? 'Active' : 'Standby'}
           </p>
         </motion.div>
 
@@ -318,22 +319,22 @@ export const Dashboard = () => {
               <Cpu size={24} />
             </div>
             <div className="text-right">
-              <span className="text-xs font-bold text-slate-400 uppercase">Link</span>
+              <span className="text-xs font-bold text-slate-400 uppercase">Status</span>
               <p className={cn(
                 "text-sm font-bold",
                 hardwareId ? (isOnline ? "text-emerald-600" : "text-rose-600") : "text-slate-400"
               )}>
-                {hardwareId ? (isOnline ? 'Online' : 'Offline') : 'None'}
+                {hardwareId ? (isOnline ? 'Verified' : 'Offline') : 'Simulated'}
               </p>
             </div>
           </div>
           <h3 className="text-slate-500 text-xs font-medium">Hardware</h3>
           <p className="text-lg font-bold text-slate-900 mt-1 truncate">
-            {hardwareId ? hardwareId : 'Simulated'}
+            {hardwareId ? `Node: ${hardwareId}` : 'Simulated Node'}
           </p>
           {auth.currentUser && (
             <p className="text-[10px] text-slate-400 mt-1 font-mono break-all">
-              RTDB: {`users/${auth.currentUser.uid}/hardware`}
+              {hardwareId ? 'Hardware Connected' : 'Running Simulation'}
             </p>
           )}
         </motion.div>

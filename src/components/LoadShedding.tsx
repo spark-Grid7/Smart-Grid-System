@@ -29,8 +29,9 @@ export const LoadShedding = () => {
   // Shedding Logic
   const getSheddingStatus = (priority: number) => {
     if (!ecoMode) return 'active';
-    if (loadPercentage > 85 && priority >= 2) return 'shed';
-    if (loadPercentage > 70 && priority >= 3) return 'shed';
+    // Priority 1 NEVER shed per user request
+    if (loadPercentage >= 85 && priority >= 2) return 'shed';
+    if (loadPercentage >= 75 && priority >= 3) return 'shed';
     return 'active';
   };
 
@@ -150,18 +151,18 @@ export const LoadShedding = () => {
             Shedding Rules (Eco Mode)
           </h2>
           <div className="space-y-6">
-            <div className={`p-4 rounded-2xl border ${loadPercentage > 75 && ecoMode ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+            <div className={`p-4 rounded-2xl border ${loadPercentage >= 75 && ecoMode ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bold text-slate-700">Level 1: Low Priority</span>
-                {loadPercentage > 75 && ecoMode && <span className="text-xs font-bold text-amber-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
+                {loadPercentage >= 75 && ecoMode && <span className="text-xs font-bold text-amber-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
               </div>
               <p className="text-sm text-slate-500">Automatically turned OFF when load exceeds 75% in Eco Mode.</p>
             </div>
 
-            <div className={`p-4 rounded-2xl border ${loadPercentage > 85 && ecoMode ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-100'}`}>
+            <div className={`p-4 rounded-2xl border ${loadPercentage >= 85 && ecoMode ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-100'}`}>
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bold text-slate-700">Level 2: Medium Priority</span>
-                {loadPercentage > 85 && ecoMode && <span className="text-xs font-bold text-rose-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
+                {loadPercentage >= 85 && ecoMode && <span className="text-xs font-bold text-rose-600 uppercase tracking-widest animate-pulse">Shedding Active</span>}
               </div>
               <p className="text-sm text-slate-500">Automatically turned OFF when load exceeds 85% in Eco Mode.</p>
             </div>
