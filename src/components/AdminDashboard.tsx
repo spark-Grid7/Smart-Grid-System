@@ -48,7 +48,7 @@ const UserRow: React.FC<{ user: UserData }> = ({ user }) => {
         const hId = docSnap.data().hardwareId;
         
         // 2. Listen to RTDB
-        const basePath = `users/${user.id}/hardware`;
+        const basePath = `users/${user.id.trim()}/hardware`;
           
         const sensorsRef = ref(rtdb, `${basePath}/sensors/realtime`);
         const statusRef = ref(rtdb, `${basePath}/status`);

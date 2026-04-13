@@ -35,6 +35,8 @@ export const Hardware = () => {
   const [loading, setLoading] = useState(true);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
   const [linkStatus, setLinkStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [simPower, setSimPower] = useState(0);
+  const [simVoltage, setSimVoltage] = useState(230);
 
   useEffect(() => {
     if (!auth.currentUser || !linkedId) {
@@ -43,7 +45,8 @@ export const Hardware = () => {
       return;
     }
 
-    const basePath = `users/${auth.currentUser.uid}/hardware`;
+    const uid = auth.currentUser.uid.trim();
+    const basePath = `users/${uid}/hardware`;
     const linkedRef = ref(rtdb, `${basePath}/status/isLinked`);
     
     const unsub = onValue(linkedRef, (snapshot) => {
@@ -59,7 +62,7 @@ export const Hardware = () => {
     setIsLinking(true);
     setLinkStatus('idle');
     try {
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser.uid.trim();
       const mac = hardwareId.trim().toUpperCase();
       
       // 1. Update Firestore for the UI
@@ -87,7 +90,7 @@ export const Hardware = () => {
     
     setIsLinking(true);
     try {
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser.uid.trim();
       const userDocRef = doc(db, 'users', uid);
       await updateDoc(userDocRef, { hardwareId: null });
       
@@ -100,6 +103,17 @@ export const Hardware = () => {
     } finally {
       setIsLinking(false);
     }
+  };
+
+  const updateSimulation = async (power: number, v: number) => {
+    if (!auth.currentUser || linkedId) return;
+    const uid = auth.currentUser.uid.trim();
+    const basePath = `users/${uid}/hardware/sensors/realtime`;
+    await set(ref(rtdb, basePath), {
+      power: power,
+      voltage: v,
+      current: Number((power / v).toFixed(2))
+    });
   };
 
   if (loading) {
@@ -335,16 +349,27 @@ export const Hardware = () => {
             </div>
             <div>
               <p className="text-xs text-slate-400 font-bold uppercase">Hardware Data</p>
-              <p className="text-sm font-bold text-slate-700">{isOnline ? 'Receiving Live Packets' : 'No Data Received'}</p>
+              <p className="text-sm font-bold text-slate-700">
+                {isOnline ? 'Receiving Live Packets' : 'No Data Received'}
+              </p>
+              {rawRtdbData?.status?.lastSeen && (
+                <p className="text-[10px] text-slate-400 font-mono">
+                  Last Seen: {new Date(rawRtdbData.status.lastSeen).toLocaleTimeString()}
+                </p>
+              )}
             </div>
           </div>
           <div className="p-4 bg-white rounded-2xl border border-slate-100 flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
-              <Activity size={20} />
+              <Smartphone size={20} />
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-bold uppercase">Active Path</p>
-              <p className="text-sm font-bold text-slate-700 truncate max-w-[150px]">{dataSource}</p>
+              <p className="text-xs text-slate-400 font-bold uppercase">Verified Pins</p>
+              <p className="text-sm font-bold text-slate-700">
+                {Object.keys(activePins).length > 0 
+                  ? `${Object.keys(activePins).join(', ')}` 
+                  : 'None Detected'}
+              </p>
             </div>
           </div>
         </div>
@@ -391,6 +416,63 @@ export const Hardware = () => {
             </div>
           )}
         </div>
+
+        {/* Compact Simulation Controls */}
+        {!linkedId && (
+          <div className="mt-8 p-6 bg-slate-900 rounded-2xl border border-slate-800 shadow-xl">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg">
+                <Activity size={18} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Simulation Mode</h4>
+                <p className="text-[10px] text-slate-500">Test load shedding without hardware</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Power Load</label>
+                  <span className="text-sm font-mono text-amber-400 font-bold">{simPower} W</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="6000" 
+                  step="50"
+                  value={simPower}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    setSimPower(val);
+                    updateSimulation(val, simVoltage);
+                  }}
+                  className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Voltage</label>
+                  <span className="text-sm font-mono text-blue-400 font-bold">{simVoltage} V</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="160" 
+                  max="260" 
+                  step="1"
+                  value={simVoltage}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    setSimVoltage(val);
+                    updateSimulation(simPower, val);
+                  }}
+                  className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Troubleshooting</h3>

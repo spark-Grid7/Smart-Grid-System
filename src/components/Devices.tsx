@@ -68,7 +68,7 @@ export const Devices = () => {
       });
 
       // Sync to Realtime Database for ESP32
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser.uid.trim();
       const basePath = `users/${uid}/hardware/appliances/${docRef.id}`;
       await set(ref(rtdb, basePath), {
         name: newDevice.name,
@@ -89,7 +89,7 @@ export const Devices = () => {
   const handleDeleteDevice = async (id: string) => {
     if (!auth.currentUser) return;
     try {
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser.uid.trim();
       const basePath = `users/${uid}/hardware/appliances/${id}`;
       await set(ref(rtdb, basePath), null);
 

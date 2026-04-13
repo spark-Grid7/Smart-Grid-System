@@ -100,7 +100,7 @@ export const Schedules = () => {
       });
 
       // Sync to RTDB for hardware
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser.uid.trim();
       const basePath = `users/${uid}/hardware/schedules/${docRef.id}`;
       await set(ref(rtdb, basePath), {
         ...newSchedule,
@@ -123,7 +123,7 @@ export const Schedules = () => {
   const handleDeleteSchedule = async (id: string) => {
     if (!auth.currentUser) return;
     try {
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser.uid.trim();
       const basePath = `users/${uid}/hardware/schedules/${id}`;
       await remove(ref(rtdb, basePath));
       
@@ -139,7 +139,7 @@ export const Schedules = () => {
       const scheduleRef = doc(db, 'schedules', schedule.id);
       await updateDoc(scheduleRef, { enabled: !schedule.enabled });
       
-      const uid = auth.currentUser.uid;
+      const uid = auth.currentUser.uid.trim();
       const basePath = `users/${uid}/hardware/schedules/${schedule.id}/enabled`;
       await set(ref(rtdb, basePath), !schedule.enabled);
     } catch (error) {

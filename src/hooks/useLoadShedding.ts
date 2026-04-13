@@ -75,7 +75,7 @@ export const useLoadShedding = () => {
     let unsubscribePower = () => {};
     
     const setupPowerListener = (mac: string | null) => {
-      const uid = auth.currentUser?.uid;
+      const uid = auth.currentUser?.uid?.trim();
       if (!uid) return () => {};
 
       // Reset state when switching modes to prevent data leakage
@@ -146,8 +146,20 @@ export const useLoadShedding = () => {
         const settings = data.settings || data.info?.settings;
         const appliances = data.appliances || data.info?.appliances;
 
+        // Improved Online Status Check: Check if lastSeen is within last 15 seconds
+        const lastSeen = status?.lastSeen || 0;
+        const now = Date.now();
+        const isRecentlySeen = (now - lastSeen) < 15000;
+        
+        setIsOnline(isRecentlySeen);
+
         if (settings?.ecoMode !== undefined) setEcoMode(settings.ecoMode);
         if (settings?.macAddress !== undefined) setDetectedMac(settings.macAddress);
+
+        // Handle verified pins from status
+        if (status?.verified_pins) {
+          setActivePins(status.verified_pins);
+        }
 
         if (appliances) {
           const statusMap: Record<string, boolean> = {};
