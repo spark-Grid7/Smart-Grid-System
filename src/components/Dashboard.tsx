@@ -56,9 +56,7 @@ export const Dashboard = () => {
     const initializeIfMissing = async () => {
       if (!auth.currentUser) return;
       const uid = auth.currentUser.uid;
-      const basePath = hardwareId 
-        ? `${uid}/hardware/${hardwareId}`
-        : `${uid}/hardware`;
+      const basePath = `${uid}/hardware`;
       
       const hardwareRef = ref(rtdb, basePath);
       
@@ -137,9 +135,7 @@ export const Dashboard = () => {
       await updateDoc(userDocRef, { ecoMode: newEco });
       
       // Sync to RTDB
-      const basePath = hardwareId 
-        ? `${uid}/hardware/${hardwareId}/settings/ecoMode`
-        : `${uid}/hardware/settings/ecoMode`;
+      const basePath = `${uid}/hardware/settings/ecoMode`;
       await set(ref(rtdb, basePath), newEco);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
@@ -158,9 +154,7 @@ export const Dashboard = () => {
         await updateDoc(deviceRef, { status: newStatus });
         
         // Update Realtime Database
-        const basePath = hardwareId 
-          ? `${uid}/hardware/${hardwareId}/appliances/${deviceId}`
-          : `${uid}/hardware/appliances/${deviceId}`;
+        const basePath = `${uid}/hardware/appliances/${deviceId}`;
           
         await set(ref(rtdb, `${basePath}/command`), newStatus ? "ON" : "OFF");
         await set(ref(rtdb, `${basePath}/status`), newStatus);
@@ -353,7 +347,7 @@ export const Dashboard = () => {
           </p>
           {auth.currentUser && (
             <p className="text-[10px] text-slate-400 mt-1 font-mono break-all">
-              RTDB: {hardwareId ? `/${auth.currentUser.uid}/hardware/${hardwareId}` : `/${auth.currentUser.uid}/hardware`}
+              RTDB: {`/${auth.currentUser.uid}/hardware`}
             </p>
           )}
         </motion.div>

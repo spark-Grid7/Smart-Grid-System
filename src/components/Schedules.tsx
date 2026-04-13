@@ -101,9 +101,7 @@ export const Schedules = () => {
 
       // Sync to RTDB for hardware
       const uid = auth.currentUser.uid;
-      const basePath = hardwareId 
-        ? `${uid}/hardware/${hardwareId}/schedules/${docRef.id}`
-        : `${uid}/hardware/schedules/${docRef.id}`;
+      const basePath = `${uid}/hardware/schedules/${docRef.id}`;
       await set(ref(rtdb, basePath), {
         ...newSchedule,
         deviceName: device.name
@@ -126,9 +124,7 @@ export const Schedules = () => {
     if (!auth.currentUser) return;
     try {
       const uid = auth.currentUser.uid;
-      const basePath = hardwareId 
-        ? `${uid}/hardware/${hardwareId}/schedules/${id}`
-        : `${uid}/hardware/schedules/${id}`;
+      const basePath = `${uid}/hardware/schedules/${id}`;
       await remove(ref(rtdb, basePath));
       
       await deleteDoc(doc(db, 'schedules', id));
@@ -144,9 +140,7 @@ export const Schedules = () => {
       await updateDoc(scheduleRef, { enabled: !schedule.enabled });
       
       const uid = auth.currentUser.uid;
-      const basePath = hardwareId 
-        ? `${uid}/hardware/${hardwareId}/schedules/${schedule.id}/enabled`
-        : `${uid}/hardware/schedules/${schedule.id}/enabled`;
+      const basePath = `${uid}/hardware/schedules/${schedule.id}/enabled`;
       await set(ref(rtdb, basePath), !schedule.enabled);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `schedules/${schedule.id}`);

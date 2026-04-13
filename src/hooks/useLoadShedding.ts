@@ -85,9 +85,7 @@ export const useLoadShedding = () => {
       setIsOnline(false);
       setActivePins({});
 
-      const basePath = mac 
-        ? `${uid}/hardware/${mac}`
-        : `${uid}/hardware`;
+      const basePath = `${uid}/hardware`;
       
       console.log(`[SmartGrid] Monitoring Path: ${basePath}`);
       
@@ -131,15 +129,9 @@ export const useLoadShedding = () => {
         const i = findValue(rt, ['current', 'i', 'I', 'amps', 'line_current']) ?? 0;
 
         let finalP = p;
-        if (v > 100 && p > 0 && p < 20) {
-          finalP = p * 1000; 
-        }
         
-        if (i > 0.01) {
-          const calculatedP = i * v;
-          if (finalP < 0.1 && calculatedP > 0.1) {
-            finalP = calculatedP;
-          }
+        if (i > 0.01 && finalP < 0.1) {
+          finalP = i * v;
         }
 
         setLivePower(Math.round(finalP));
@@ -217,7 +209,8 @@ export const useLoadShedding = () => {
       
       console.log(`[SmartGrid] Checking Shedding - Power: ${p}W, Limit: ${limit}W, Eco: ${ecoMode}`);
 
-      for (const device of devices) {
+      // Use mergedDevices to get the real-time status from RTDB
+      for (const device of mergedDevices) {
         let shouldBeOff = false;
         
         if (p >= limit) {
@@ -231,9 +224,7 @@ export const useLoadShedding = () => {
         if (shouldBeOff && device.status) {
           console.log(`[SmartGrid] SHEDDING DEVICE: ${device.name} (Priority ${device.priority})`);
           const deviceRef = doc(db, 'devices', device.id);
-          const basePath = hardwareId 
-            ? `${auth.currentUser.uid}/hardware/${hardwareId}`
-            : `${auth.currentUser.uid}/hardware`;
+          const basePath = `${auth.currentUser.uid}/hardware`;
           
           const rtdbRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
           

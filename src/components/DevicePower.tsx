@@ -21,10 +21,7 @@ export const DevicePower = ({ pin }: DevicePowerProps) => {
 
     const unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
       if (docSnap.exists()) {
-        const hId = docSnap.data().hardwareId;
-        const basePath = hId 
-          ? `${uid}/hardware/${hId}/appliances/${pin}`
-          : `${uid}/hardware/appliances/${pin}`;
+        const basePath = `${uid}/hardware/appliances/${pin}`;
         
         const powerRef = ref(rtdb, `${basePath}/power`);
         

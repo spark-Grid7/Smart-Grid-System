@@ -91,8 +91,8 @@
     }
   },
   "realtimeDatabase": {
-    "/users/{userId}/hardware/{macAddress}": {
-      "description": "Hardware node for a specific ESP32 device",
+    "/{userId}/hardware": {
+      "description": "Hardware node for a user's ESP32 device",
       "properties": {
         "status": {
           "description": "Connectivity and heartbeat status",
