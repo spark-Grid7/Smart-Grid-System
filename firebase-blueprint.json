@@ -91,7 +91,7 @@
     }
   },
   "realtimeDatabase": {
-    "/{userId}/hardware": {
+    "/users/{userId}/hardware": {
       "description": "Hardware node for a user's ESP32 device",
       "properties": {
         "status": {

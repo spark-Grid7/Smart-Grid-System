@@ -43,7 +43,7 @@ export const Hardware = () => {
       return;
     }
 
-    const basePath = `${auth.currentUser.uid}/hardware`;
+    const basePath = `users/${auth.currentUser.uid}/hardware`;
     const linkedRef = ref(rtdb, `${basePath}/status/isLinked`);
     
     const unsub = onValue(linkedRef, (snapshot) => {
@@ -67,7 +67,7 @@ export const Hardware = () => {
       await updateDoc(userDocRef, { hardwareId: mac });
       
       // 2. Update RTDB for the ESP32 to verify
-      const basePath = `${uid}/hardware`;
+      const basePath = `users/${uid}/hardware`;
       await set(ref(rtdb, `${basePath}/settings/macAddress`), mac);
       await set(ref(rtdb, `${basePath}/status/isLinked`), false); // Reset until ESP32 confirms
       
@@ -91,7 +91,7 @@ export const Hardware = () => {
       const userDocRef = doc(db, 'users', uid);
       await updateDoc(userDocRef, { hardwareId: null });
       
-      const basePath = `${uid}/hardware`;
+      const basePath = `users/${uid}/hardware`;
       await set(ref(rtdb, `${basePath}/settings/macAddress`), null);
       await set(ref(rtdb, `${basePath}/status/isLinked`), false);
       setShowUnlinkConfirm(false);
@@ -228,7 +228,7 @@ export const Hardware = () => {
                     </div>
                   )}
                   <p className="text-[10px] text-slate-400 font-mono mt-1">
-                    Realtime Database Path: <span className="text-emerald-600">/{auth.currentUser?.uid}/hardware</span>
+                    Realtime Database Path: <span className="text-emerald-600">/users/{auth.currentUser?.uid}/hardware</span>
                   </p>
                 </div>
               </div>

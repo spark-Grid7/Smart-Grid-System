@@ -85,7 +85,7 @@ export const useLoadShedding = () => {
       setIsOnline(false);
       setActivePins({});
 
-      const basePath = `${uid}/hardware`;
+      const basePath = `users/${uid}/hardware`;
       
       console.log(`[SmartGrid] Monitoring Path: ${basePath}`);
       
@@ -224,7 +224,7 @@ export const useLoadShedding = () => {
         if (shouldBeOff && device.status) {
           console.log(`[SmartGrid] SHEDDING DEVICE: ${device.name} (Priority ${device.priority})`);
           const deviceRef = doc(db, 'devices', device.id);
-          const basePath = `${auth.currentUser.uid}/hardware`;
+          const basePath = `users/${auth.currentUser.uid}/hardware`;
           
           const rtdbRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
           
