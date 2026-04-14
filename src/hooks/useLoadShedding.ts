@@ -103,6 +103,24 @@ export const useLoadShedding = () => {
 
         const data = snapshot.val();
         
+        // 1. Detect MAC address from sub-nodes (e.g., B0CBD8E96884)
+        // This explains "how" it shows even when not linked - the app scans for active signatures
+        let macFound: string | null = null;
+        Object.keys(data).forEach(key => {
+          if (key.length === 12 && /^[0-9A-F]+$/.test(key)) {
+            macFound = key;
+          }
+        });
+        if (macFound) setDetectedMac(macFound);
+
+        // 2. Determine the correct data source (nested or flat)
+        // If we have a linked hardwareId and it exists as a sub-node, use that
+        const hId = hardwareId; // from Firestore
+        const nestedData = hId && data[hId] ? data[hId] : (macFound && data[macFound] ? data[macFound] : null);
+        
+        // Merge nested data with flat data (flat data takes priority for simulation)
+        const mergedData = { ...nestedData, ...data };
+
         // DEEP SEARCH: Find power, voltage, current anywhere in the object
         const findValue = (obj: any, keys: string[]): any => {
           if (!obj || typeof obj !== 'object') return undefined;
@@ -125,7 +143,7 @@ export const useLoadShedding = () => {
         };
 
         // Explicitly look for the structure: sensors/realtime
-        const rt = data.sensors?.realtime || data.info?.sensors?.realtime || data.realtime || data;
+        const rt = mergedData.sensors?.realtime || mergedData.info?.sensors?.realtime || mergedData.realtime || mergedData;
         
         const p = findValue(rt, ['power', 'p', 'watts', 'P', 'realtime_power', 'load']) ?? 0;
         const v = findValue(rt, ['voltage', 'v', 'V', 'volts', 'line_voltage']) ?? 230;
@@ -145,9 +163,9 @@ export const useLoadShedding = () => {
         setRawRtdbData(data);
 
         // Handle Status & Settings
-        const status = data.status || data.info?.status;
-        const settings = data.settings || data.info?.settings;
-        const appliances = data.appliances || data.info?.appliances;
+        const status = mergedData.status || mergedData.info?.status;
+        const settings = mergedData.settings || mergedData.info?.settings;
+        const appliances = mergedData.appliances || mergedData.info?.appliances;
 
         // Improved Online Status Check: Check if lastSeen is within last 15 seconds
         const lastSeen = status?.lastSeen || 0;
