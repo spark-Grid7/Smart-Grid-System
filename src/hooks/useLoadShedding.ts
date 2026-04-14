@@ -85,9 +85,6 @@ export const useLoadShedding = () => {
       if (!uid) return () => {};
 
       // Reset state when switching modes to prevent data leakage
-      setLivePower(0);
-      setVoltage(230);
-      setCurrent(0);
       setIsOnline(false);
       setActivePins({});
 

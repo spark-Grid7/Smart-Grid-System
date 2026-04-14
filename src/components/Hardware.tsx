@@ -48,7 +48,13 @@ export const Hardware = () => {
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
   const [linkStatus, setLinkStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [simPower, setSimPower] = useState(0);
-  const [simVoltage, setSimVoltage] = useState(230);
+
+  // Sync simulation slider with current live power on mount
+  useEffect(() => {
+    if (!linkedId && livePower !== undefined) {
+      setSimPower(livePower);
+    }
+  }, [linkedId, livePower]);
 
   useEffect(() => {
     if (!auth.currentUser || !linkedId) {
@@ -117,14 +123,14 @@ export const Hardware = () => {
     }
   };
 
-  const updateSimulation = async (power: number, v: number) => {
+  const updateSimulation = async (power: number) => {
     if (!auth.currentUser || linkedId) return;
     const uid = auth.currentUser.uid.trim();
     const basePath = `users/${uid}/hardware/sensors/realtime`;
     await set(ref(rtdb, basePath), {
       power: power,
-      voltage: v,
-      current: Number((power / v).toFixed(2))
+      voltage: 230,
+      current: Number((power / 230).toFixed(2))
     });
   };
 
@@ -401,11 +407,7 @@ export const Hardware = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-              <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Voltage</p>
-              <p className="text-2xl font-mono text-blue-400">{(Number(voltage) || 0).toFixed(2)}<span className="text-sm ml-1 text-slate-500">V</span></p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
               <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Current</p>
               <p className="text-2xl font-mono text-emerald-400">{(Number(current) || 0).toFixed(3)}<span className="text-sm ml-1 text-slate-500">A</span></p>
@@ -442,7 +444,7 @@ export const Hardware = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Power Load</label>
@@ -457,29 +459,9 @@ export const Hardware = () => {
                   onChange={(e) => {
                     const val = parseInt(e.target.value);
                     setSimPower(val);
-                    updateSimulation(val, simVoltage);
+                    updateSimulation(val);
                   }}
                   className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Voltage</label>
-                  <span className="text-sm font-mono text-blue-400 font-bold">{simVoltage} V</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="160" 
-                  max="260" 
-                  step="1"
-                  value={simVoltage}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    setSimVoltage(val);
-                    updateSimulation(simPower, val);
-                  }}
-                  className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
                 />
               </div>
             </div>

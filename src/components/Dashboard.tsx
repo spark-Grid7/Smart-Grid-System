@@ -242,7 +242,7 @@ export const Dashboard = () => {
                 </div>
               )}
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                {hardwareId && !isOnline ? '---' : `V: ${voltage.toFixed(1)}V | I: ${current.toFixed(2)}A`}
+                {hardwareId && !isOnline ? '---' : `Current: ${current.toFixed(2)}A`}
               </p>
             </div>
           </div>
