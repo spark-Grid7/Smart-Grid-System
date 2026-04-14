@@ -15,6 +15,7 @@ import {
   Smartphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'react-toastify';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { ref, onValue, set } from 'firebase/database';
 import { db, auth, rtdb } from '../firebase';
@@ -48,6 +49,7 @@ export const Hardware = () => {
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
   const [linkStatus, setLinkStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [simPower, setSimPower] = useState(0);
+  const [isCleaning, setIsCleaning] = useState(false);
 
   // Sync simulation slider with current live power on mount
   useEffect(() => {
@@ -126,12 +128,41 @@ export const Hardware = () => {
   const updateSimulation = async (power: number) => {
     if (!auth.currentUser || linkedId) return;
     const uid = auth.currentUser.uid.trim();
-    const basePath = `users/${uid}/hardware/sensors/realtime`;
+    
+    // Use detected MAC if available to consolidate branches
+    const activeMac = detectedMac;
+    const basePath = activeMac 
+      ? `users/${uid}/hardware/${activeMac}/sensors/realtime` 
+      : `users/${uid}/hardware/sensors/realtime`;
+
     await set(ref(rtdb, basePath), {
       power: power,
       voltage: 230,
       current: Number((power / 230).toFixed(2))
     });
+  };
+
+  const handleCleanDatabase = async () => {
+    if (!auth.currentUser) return;
+    setIsCleaning(true);
+    try {
+      const uid = auth.currentUser.uid.trim();
+      const basePath = `users/${uid}/hardware`;
+      
+      // Remove the flat branches that cause "two branches" confusion
+      // We keep the MAC subfolder (e.g. B0CBD8E96884)
+      await set(ref(rtdb, `${basePath}/appliances`), null);
+      await set(ref(rtdb, `${basePath}/sensors`), null);
+      await set(ref(rtdb, `${basePath}/settings`), null);
+      await set(ref(rtdb, `${basePath}/status`), null);
+      
+      toast.success("Database consolidated successfully!");
+    } catch (error) {
+      console.error("Cleanup failed", error);
+      toast.error("Failed to clean database");
+    } finally {
+      setIsCleaning(false);
+    }
   };
 
   if (loading) {
@@ -486,6 +517,20 @@ export const Hardware = () => {
                 Check that the Device ID matches exactly (case-insensitive).
               </li>
             </ul>
+
+            <div className="pt-4 border-t border-slate-100">
+              <button
+                onClick={handleCleanDatabase}
+                disabled={isCleaning}
+                className="flex items-center gap-2 text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={isCleaning ? 'animate-spin' : ''} />
+                Consolidate Database (Remove Redundant Branches)
+              </button>
+              <p className="text-[10px] text-slate-400 mt-2">
+                This will remove the flat "appliances" and "sensors" folders and move all logic into your device's MAC folder.
+              </p>
+            </div>
           </div>
         </div>
       </div>

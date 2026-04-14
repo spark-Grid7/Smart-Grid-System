@@ -263,7 +263,12 @@ export const useLoadShedding = () => {
           const uid = auth.currentUser?.uid?.trim();
           if (!uid) continue;
           
-          const basePath = `users/${uid}/hardware`;
+          // Use MAC subfolder if detected to avoid "two branches"
+          const activeMac = hardwareId || detectedMac;
+          const basePath = activeMac 
+            ? `users/${uid}/hardware/${activeMac}` 
+            : `users/${uid}/hardware`;
+
           const rtdbCmdRef = ref(rtdb, `${basePath}/appliances/${device.id}/command`);
           const rtdbStatusRef = ref(rtdb, `${basePath}/appliances/${device.id}/status`);
           
